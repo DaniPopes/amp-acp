@@ -27,6 +27,7 @@ Download the binary for your platform, make it executable (`chmod +x` on Linux/m
 {
   "agent_servers": {
     "Amp": {
+      "type": "custom",
       "command": "/path/to/amp-acp-darwin-arm64"
     }
   }
@@ -39,6 +40,7 @@ Download the binary for your platform, make it executable (`chmod +x` on Linux/m
 {
   "agent_servers": {
     "Amp": {
+      "type": "custom",
       "command": "npx",
       "args": ["-y", "amp-acp"],
       "env": {
@@ -98,6 +100,7 @@ MCP servers configured in Zed's `context_servers` are automatically forwarded to
 {
   "agent_servers": {
     "Amp": {
+      "type": "custom",
       "command": "npx",
       "args": ["-y", "amp-acp"]
     }
@@ -116,6 +119,7 @@ MCP servers configured in Zed's `context_servers` are automatically forwarded to
 {
   "agent_servers": {
     "Amp": {
+      "type": "custom",
       "command": "npx",
       "args": ["-y", "amp-acp"]
     }
