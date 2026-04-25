@@ -2,7 +2,7 @@ import { describe, it, beforeEach, expect } from 'bun:test';
 import { ClientSideConnection, AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import { AmpAcpAgent, parseThreadMarkdown } from '../src/server.js';
 import { toAcpNotifications } from '../src/to-acp.js';
-import type { PromptRequest, PromptResponse, SessionNotification } from '@agentclientprotocol/sdk';
+import type { SessionNotification } from '@agentclientprotocol/sdk';
 
 class TestClient {
   notifications: SessionNotification[] = [];
@@ -227,103 +227,6 @@ describe('ACP Protocol End-to-End', () => {
     );
     expect(modeUpdate).toBeDefined();
     expect((modeUpdate!.update as { currentModeId: string }).currentModeId).toBe('plan');
-  });
-});
-
-describe('prompt queueing', () => {
-  it('serializes overlapping prompts and resolves them in order', async () => {
-    // Drive AmpAcpAgent directly (bypass JSON-RPC) so we can stub runPrompt
-    // without spawning amp subprocesses.
-    const fakeClient = new TestClient();
-    const agent = new AmpAcpAgent(fakeClient as unknown as Parameters<typeof AmpAcpAgent>[0]);
-
-    // Seed a session manually so we don't need to call newSession (which
-    // would shell out to `amp threads new`).
-    const sessionId = 'T-00000000-0000-0000-0000-000000000001';
-    agent.sessions.set(sessionId, {
-      threadId: sessionId,
-      controller: null,
-      cancelled: false,
-      active: false,
-      mode: 'default',
-      model: 'smart',
-      mcpConfig: {},
-      cwd: '/tmp',
-      queue: [],
-      draining: false,
-    });
-
-    const order: string[] = [];
-    let inflight = 0;
-    let maxInflight = 0;
-
-    (agent as unknown as { runPrompt: (p: PromptRequest) => Promise<PromptResponse> }).runPrompt =
-      async (p) => {
-        inflight++;
-        maxInflight = Math.max(maxInflight, inflight);
-        const tag = (p.prompt[0] as { text: string }).text;
-        await new Promise((r) => setTimeout(r, 20));
-        order.push(tag);
-        inflight--;
-        return { stopReason: 'end_turn' };
-      };
-
-    const mk = (text: string): PromptRequest => ({
-      sessionId,
-      prompt: [{ type: 'text', text }],
-    });
-
-    const results = await Promise.all([
-      agent.prompt(mk('a')),
-      agent.prompt(mk('b')),
-      agent.prompt(mk('c')),
-    ]);
-
-    expect(order).toEqual(['a', 'b', 'c']);
-    expect(maxInflight).toBe(1);
-    expect(results.every((r) => r.stopReason === 'end_turn')).toBe(true);
-  });
-
-  it('cancel rejects queued prompts as cancelled', async () => {
-    const fakeClient = new TestClient();
-    const agent = new AmpAcpAgent(fakeClient as unknown as Parameters<typeof AmpAcpAgent>[0]);
-    const sessionId = 'T-00000000-0000-0000-0000-000000000002';
-    agent.sessions.set(sessionId, {
-      threadId: sessionId,
-      controller: null,
-      cancelled: false,
-      active: false,
-      mode: 'default',
-      model: 'smart',
-      mcpConfig: {},
-      cwd: '/tmp',
-      queue: [],
-      draining: false,
-    });
-
-    let firstStarted = false;
-    (agent as unknown as { runPrompt: (p: PromptRequest) => Promise<PromptResponse> }).runPrompt =
-      async () => {
-        firstStarted = true;
-        const s = agent.sessions.get(sessionId)!;
-        s.active = true;
-        s.controller = new AbortController();
-        await new Promise<void>((resolve) => {
-          s.controller!.signal.addEventListener('abort', () => resolve());
-        });
-        s.active = false;
-        return { stopReason: 'cancelled' };
-      };
-
-    const p1 = agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'a' }] });
-    const p2 = agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'b' }] });
-
-    while (!firstStarted) await new Promise((r) => setTimeout(r, 5));
-    await agent.cancel({ sessionId });
-
-    const [r1, r2] = await Promise.all([p1, p2]);
-    expect(r1.stopReason).toBe('cancelled');
-    expect(r2.stopReason).toBe('cancelled');
   });
 });
 

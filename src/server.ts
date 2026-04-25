@@ -47,12 +47,6 @@ import packageJson from '../package.json';
 
 const PACKAGE_VERSION: string = packageJson.version;
 
-interface QueuedPrompt {
-  params: PromptRequest;
-  resolve: (value: PromptResponse) => void;
-  reject: (err: unknown) => void;
-}
-
 interface SessionState {
   threadId: string | null;
   controller: AbortController | null;
@@ -62,8 +56,6 @@ interface SessionState {
   model: string;
   mcpConfig: AmpMcpConfig;
   cwd: string;
-  queue: QueuedPrompt[];
-  draining: boolean;
 }
 
 const AVAILABLE_MODES = [
@@ -277,8 +269,6 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd: params.cwd || process.cwd(),
-      queue: [],
-      draining: false,
     });
 
     const result: NewSessionResponse = {
@@ -342,8 +332,6 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
-      queue: [],
-      draining: false,
     });
 
     for (const note of notifications) {
@@ -385,8 +373,6 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
-      queue: [],
-      draining: false,
     });
 
     // Replay the source thread's history to the client so the user sees the
@@ -433,8 +419,6 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
-      queue: [],
-      draining: false,
     });
 
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
@@ -464,33 +448,6 @@ export class AmpAcpAgent implements Agent {
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) throw new Error('Session not found');
-    return new Promise<PromptResponse>((resolve, reject) => {
-      s.queue.push({ params, resolve, reject });
-      if (!s.draining) this.drainPromptQueue(s);
-    });
-  }
-
-  private async drainPromptQueue(s: SessionState): Promise<void> {
-    s.draining = true;
-    try {
-      while (s.queue.length > 0) {
-        const next = s.queue.shift();
-        if (!next) break;
-        try {
-          const r = await this.runPrompt(next.params);
-          next.resolve(r);
-        } catch (e) {
-          next.reject(e);
-        }
-      }
-    } finally {
-      s.draining = false;
-    }
-  }
-
-  private async runPrompt(params: PromptRequest): Promise<PromptResponse> {
     const s = this.sessions.get(params.sessionId);
     if (!s) throw new Error('Session not found');
     s.cancelled = false;
@@ -661,12 +618,6 @@ export class AmpAcpAgent implements Agent {
     if (s.active && s.controller) {
       s.cancelled = true;
       s.controller.abort();
-    }
-    // Reject any queued prompts that haven't started yet so the client doesn't
-    // see them silently start running after the user pressed cancel.
-    while (s.queue.length > 0) {
-      const q = s.queue.shift();
-      if (q) q.resolve({ stopReason: 'cancelled' });
     }
   }
 
