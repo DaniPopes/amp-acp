@@ -551,6 +551,7 @@ export class AmpAcpAgent implements Agent {
       cwd: s.cwd,
       env: { TERM: 'dumb' },
       mode: s.model,
+      thinking: true,
     };
 
     if (s.mode === 'bypass') {

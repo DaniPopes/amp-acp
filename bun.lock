@@ -5,8 +5,8 @@
       "name": "amp-acp",
       "dependencies": {
         "@agentclientprotocol/sdk": "0.20.0",
-        "@sourcegraph/amp": "^0.0.1777076476-ge780d5",
-        "@sourcegraph/amp-sdk": "0.1.0-20260425005347-g58772b5",
+        "@sourcegraph/amp": "0.0.1777141456-gd5ca69",
+        "@sourcegraph/amp-sdk": "0.1.0-20260425174754-gdaa8b1f",
       },
       "devDependencies": {
         "@biomejs/biome": "2.4.13",
@@ -62,9 +62,9 @@
 
     "@napi-rs/keyring-win32-x64-msvc": ["@napi-rs/keyring-win32-x64-msvc@1.1.10", "", { "os": "win32", "cpu": "x64" }, "sha512-T02DfUUvp3epOJ5lC7hcM5ff6xaLhIfymBf0LEa0oQMi+yCVoDrgjeKeGCUGwtVJWfphu58Tf9twX+hRiAD0dg=="],
 
-    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1777076476-ge780d5", "", { "dependencies": { "@napi-rs/keyring": "1.1.10" }, "bin": { "amp": "dist/main.js" } }, "sha512-2fiH98PLqaS07pdTa5N5cGwS9UVeUb+oaUVodlptVQhSwXjq+6aY8YzLBZyxNytcOs8tQzT7MrNr5UvC3Xi6Gw=="],
+    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1777141456-gd5ca69", "", { "dependencies": { "@napi-rs/keyring": "1.1.10" }, "bin": { "amp": "dist/main.js" } }, "sha512-P3j2OAGFkPtU1zuFuGxmXhksBpQXDmvFQXz/xhLB+WL7jl6fKE81uGQ7RPAoaquAb6LbuB7k/qXUg0lEGzCb8w=="],
 
-    "@sourcegraph/amp-sdk": ["@sourcegraph/amp-sdk@0.1.0-20260425005347-g58772b5", "", { "dependencies": { "zod": "^3.23.8" }, "bin": { "amp-sdk": "bin/amp-sdk.js" } }, "sha512-kNBHC2Fg1HGEPF7YRdP3b1JOjqxJE4rgilLt+SlTBJG96EJMTfWSWKOPYj/anzJb3dOGh/CPCPZrWZXPROcVXA=="],
+    "@sourcegraph/amp-sdk": ["@sourcegraph/amp-sdk@0.1.0-20260425174754-gdaa8b1f", "", { "dependencies": { "zod": "^3.23.8" }, "bin": { "amp-sdk": "bin/amp-sdk.js" } }, "sha512-wn927Hp+eHn6cPzpR3EP3eYPS2flIgJbv74uISxIfTrFDX7xbtRhktic0cXSBWv9BgPAUl7Xd0jxzvx0o8atGg=="],
 
     "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
 

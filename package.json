@@ -29,8 +29,8 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.20.0",
-    "@sourcegraph/amp": "^0.0.1777076476-ge780d5",
-    "@sourcegraph/amp-sdk": "0.1.0-20260425005347-g58772b5"
+    "@sourcegraph/amp": "0.0.1777141456-gd5ca69",
+    "@sourcegraph/amp-sdk": "0.1.0-20260425174754-gdaa8b1f"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",
