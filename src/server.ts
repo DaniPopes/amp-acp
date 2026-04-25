@@ -31,6 +31,10 @@ import {
   type WriteTextFileResponse,
   type ClientCapabilities,
   type SessionNotification,
+  type SessionConfigOption,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
+  type AuthMethod,
 } from '@agentclientprotocol/sdk';
 import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
@@ -43,6 +47,12 @@ import packageJson from '../package.json';
 
 const PACKAGE_VERSION: string = packageJson.version;
 
+interface QueuedPrompt {
+  params: PromptRequest;
+  resolve: (value: PromptResponse) => void;
+  reject: (err: unknown) => void;
+}
+
 interface SessionState {
   threadId: string | null;
   controller: AbortController | null;
@@ -52,6 +62,8 @@ interface SessionState {
   model: string;
   mcpConfig: AmpMcpConfig;
   cwd: string;
+  queue: QueuedPrompt[];
+  draining: boolean;
 }
 
 const AVAILABLE_MODES = [
@@ -130,6 +142,37 @@ const AVAILABLE_COMMANDS = [
   },
 ];
 
+function buildConfigOptions(modeId: string, modelId: string): SessionConfigOption[] {
+  return [
+    {
+      id: 'mode',
+      name: 'Mode',
+      description: 'Session permission mode',
+      category: 'mode',
+      type: 'select',
+      currentValue: modeId,
+      options: AVAILABLE_MODES.map((m) => ({
+        value: m.id,
+        name: m.name,
+        description: m.description,
+      })),
+    },
+    {
+      id: 'model',
+      name: 'Model',
+      description: 'Amp model to use',
+      category: 'model',
+      type: 'select',
+      currentValue: modelId,
+      options: AVAILABLE_MODELS.map((m) => ({
+        value: m.modelId,
+        name: m.name,
+        description: m.description,
+      })),
+    },
+  ];
+}
+
 interface InitializeResponseWithAgentInfo extends InitializeResponse {
   agentInfo: {
     name: string;
@@ -150,25 +193,18 @@ export class AmpAcpAgent implements Agent {
   async initialize(request: InitializeRequest): Promise<InitializeResponseWithAgentInfo> {
     this.clientCapabilities = request.clientCapabilities;
     console.info(`[acp] amp-acp v${PACKAGE_VERSION} initialized`);
-    return {
-      protocolVersion: 1,
-      agentInfo: {
-        name: 'amp-acp',
-        title: 'Amp ACP Agent',
-        version: PACKAGE_VERSION,
-      },
-      agentCapabilities: {
-        loadSession: true,
-        sessionCapabilities: {
-          close: {},
-          list: {},
-          resume: {},
-          fork: {},
-        },
-        promptCapabilities: { image: true, embeddedContext: true },
-        mcpCapabilities: { http: true, sse: true },
-      },
-      authMethods: [
+
+    // Only advertise terminal-auth methods to clients that signal support via
+    // `_meta["terminal-auth"]`; other clients can't launch them and would just
+    // see broken options. The API-key `setup` flow is the same shape (it also
+    // needs a terminal), so it's gated identically.
+    const supportsMetaTerminalAuth =
+      (request.clientCapabilities as { _meta?: { 'terminal-auth'?: boolean } } | undefined)
+        ?._meta?.['terminal-auth'] === true;
+
+    const authMethods: AuthMethod[] = [];
+    if (supportsMetaTerminalAuth) {
+      authMethods.push(
         {
           id: 'amp-login',
           name: 'Amp Login (browser)',
@@ -193,7 +229,33 @@ export class AmpAcpAgent implements Agent {
             },
           },
         },
-      ],
+      );
+    }
+
+    return {
+      protocolVersion: 1,
+      agentInfo: {
+        name: 'amp-acp',
+        title: 'Amp ACP Agent',
+        version: PACKAGE_VERSION,
+      },
+      agentCapabilities: {
+        _meta: {
+          amp: {
+            promptQueueing: true,
+          },
+        },
+        loadSession: true,
+        sessionCapabilities: {
+          close: {},
+          list: {},
+          resume: {},
+          fork: {},
+        },
+        promptCapabilities: { image: true, embeddedContext: true },
+        mcpCapabilities: { http: true, sse: true },
+      },
+      authMethods,
     };
   }
 
@@ -220,12 +282,15 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd: params.cwd || process.cwd(),
+      queue: [],
+      draining: false,
     });
 
     const result: NewSessionResponse = {
       sessionId,
       modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
       models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+      configOptions: buildConfigOptions('default', 'smart'),
     };
 
     setImmediate(() => this.sendAvailableCommandsUpdate(sessionId));
@@ -282,6 +347,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      queue: [],
+      draining: false,
     });
 
     for (const note of notifications) {
@@ -293,6 +360,7 @@ export class AmpAcpAgent implements Agent {
     return {
       modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
       models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+      configOptions: buildConfigOptions('default', 'smart'),
     };
   }
 
@@ -322,6 +390,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      queue: [],
+      draining: false,
     });
 
     // Replay the source thread's history to the client so the user sees the
@@ -345,6 +415,7 @@ export class AmpAcpAgent implements Agent {
       sessionId: newThreadId,
       modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
       models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+      configOptions: buildConfigOptions('default', 'smart'),
     };
   }
 
@@ -367,6 +438,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      queue: [],
+      draining: false,
     });
 
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
@@ -374,6 +447,7 @@ export class AmpAcpAgent implements Agent {
     return {
       modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
       models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+      configOptions: buildConfigOptions('default', 'smart'),
     };
   }
 
@@ -395,6 +469,33 @@ export class AmpAcpAgent implements Agent {
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
+    const s = this.sessions.get(params.sessionId);
+    if (!s) throw new Error('Session not found');
+    return new Promise<PromptResponse>((resolve, reject) => {
+      s.queue.push({ params, resolve, reject });
+      if (!s.draining) this.drainPromptQueue(s);
+    });
+  }
+
+  private async drainPromptQueue(s: SessionState): Promise<void> {
+    s.draining = true;
+    try {
+      while (s.queue.length > 0) {
+        const next = s.queue.shift();
+        if (!next) break;
+        try {
+          const r = await this.runPrompt(next.params);
+          next.resolve(r);
+        } catch (e) {
+          next.reject(e);
+        }
+      }
+    } finally {
+      s.draining = false;
+    }
+  }
+
+  private async runPrompt(params: PromptRequest): Promise<PromptResponse> {
     const s = this.sessions.get(params.sessionId);
     if (!s) throw new Error('Session not found');
     s.cancelled = false;
@@ -566,6 +667,12 @@ export class AmpAcpAgent implements Agent {
       s.cancelled = true;
       s.controller.abort();
     }
+    // Reject any queued prompts that haven't started yet so the client doesn't
+    // see them silently start running after the user pressed cancel.
+    while (s.queue.length > 0) {
+      const q = s.queue.shift();
+      if (q) q.resolve({ stopReason: 'cancelled' });
+    }
   }
 
   async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
@@ -585,7 +692,52 @@ export class AmpAcpAgent implements Agent {
       throw new RequestError(-32602, `Unknown mode: ${params.modeId}`);
     }
     s.mode = params.modeId;
+    // Notify the client so its mode indicator re-renders without waiting for
+    // the next turn.
+    try {
+      await this.client.sessionUpdate({
+        sessionId: params.sessionId,
+        update: { sessionUpdate: 'current_mode_update', currentModeId: params.modeId },
+      });
+    } catch (e) {
+      console.error('[acp] failed to send current_mode_update', e);
+    }
     return {};
+  }
+
+  async setSessionConfigOption(
+    params: SetSessionConfigOptionRequest,
+  ): Promise<SetSessionConfigOptionResponse> {
+    const s = this.sessions.get(params.sessionId);
+    if (!s) throw new Error('Session not found');
+    if (typeof params.value !== 'string') {
+      throw new RequestError(
+        -32602,
+        `Invalid value for config option ${params.configId}: expected string`,
+      );
+    }
+    if (params.configId === 'mode') {
+      if (!AVAILABLE_MODES.some((m) => m.id === params.value)) {
+        throw new RequestError(-32602, `Unknown mode: ${params.value}`);
+      }
+      s.mode = params.value;
+      try {
+        await this.client.sessionUpdate({
+          sessionId: params.sessionId,
+          update: { sessionUpdate: 'current_mode_update', currentModeId: params.value },
+        });
+      } catch (e) {
+        console.error('[acp] failed to send current_mode_update', e);
+      }
+    } else if (params.configId === 'model') {
+      if (!AVAILABLE_MODELS.some((m) => m.modelId === params.value)) {
+        throw new RequestError(-32602, `Unknown model: ${params.value}`);
+      }
+      s.model = params.value;
+    } else {
+      throw new RequestError(-32602, `Unknown config option: ${params.configId}`);
+    }
+    return { configOptions: buildConfigOptions(s.mode, s.model) };
   }
 
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {

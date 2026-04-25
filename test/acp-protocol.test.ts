@@ -2,7 +2,7 @@ import { describe, it, beforeEach, expect } from 'bun:test';
 import { ClientSideConnection, AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import { AmpAcpAgent, parseThreadMarkdown } from '../src/server.js';
 import { toAcpNotifications } from '../src/to-acp.js';
-import type { SessionNotification } from '@agentclientprotocol/sdk';
+import type { PromptRequest, PromptResponse, SessionNotification } from '@agentclientprotocol/sdk';
 
 class TestClient {
   notifications: SessionNotification[] = [];
@@ -44,7 +44,7 @@ describe('ACP Protocol End-to-End', () => {
   it('should handle initialize request and return correct capabilities', async () => {
     const response = await agentConnection.initialize({
       protocolVersion: 1,
-      clientCapabilities: {},
+      clientCapabilities: { _meta: { 'terminal-auth': true } },
     });
 
     expect(response.protocolVersion).toBe(1);
@@ -58,12 +58,24 @@ describe('ACP Protocol End-to-End', () => {
     expect(response.agentCapabilities?.sessionCapabilities?.list).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.resume).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.fork).toBeDefined();
+    expect(
+      (response.agentCapabilities?._meta as { amp?: { promptQueueing?: boolean } } | undefined)?.amp
+        ?.promptQueueing,
+    ).toBe(true);
     expect(response.authMethods).toHaveLength(2);
     expect(response.authMethods![0].id).toBe('amp-login');
     expect(response.authMethods![0]._meta?.['terminal-auth']?.command).toBe('amp');
     expect(response.authMethods![1].id).toBe('setup');
     expect(response.authMethods![1].name).toBe('Amp API Key Setup');
     expect(response.authMethods![1]._meta?.['terminal-auth']?.label).toBe('Amp API Key Setup');
+  });
+
+  it('omits terminal-auth methods when client does not support them', async () => {
+    const response = await agentConnection.initialize({
+      protocolVersion: 1,
+      clientCapabilities: {},
+    });
+    expect(response.authMethods).toEqual([]);
   });
 
   it('should handle newSession and return a valid sessionId', async () => {
@@ -183,6 +195,139 @@ describe('ACP Protocol End-to-End', () => {
         n.update.sessionUpdate === 'available_commands_update',
     );
     expect(cmdUpdate).toBeDefined();
+  });
+
+  it('returns configOptions from newSession', async () => {
+    const r = await agentConnection.newSession({ cwd: '/tmp', mcpServers: [] });
+    expect(r.configOptions).toBeDefined();
+    const ids = r.configOptions!.map((o) => o.id).sort();
+    expect(ids).toEqual(['mode', 'model']);
+  });
+
+  it('setSessionConfigOption updates state and emits current_mode_update', async () => {
+    const session = await agentConnection.newSession({ cwd: '/tmp', mcpServers: [] });
+    const r = await agentConnection.setSessionConfigOption({
+      sessionId: session.sessionId,
+      configId: 'mode',
+      value: 'bypass',
+    });
+    const modeOpt = r.configOptions.find((o) => o.id === 'mode')!;
+    expect((modeOpt as { currentValue: string }).currentValue).toBe('bypass');
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const modeUpdate = testClient.notifications.find(
+      (n) => 'sessionUpdate' in n.update && n.update.sessionUpdate === 'current_mode_update',
+    );
+    expect(modeUpdate).toBeDefined();
+  });
+
+  it('setSessionMode emits current_mode_update', async () => {
+    const session = await agentConnection.newSession({ cwd: '/tmp', mcpServers: [] });
+    testClient.notifications = [];
+    await agentConnection.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const modeUpdate = testClient.notifications.find(
+      (n) => 'sessionUpdate' in n.update && n.update.sessionUpdate === 'current_mode_update',
+    );
+    expect(modeUpdate).toBeDefined();
+    expect((modeUpdate!.update as { currentModeId: string }).currentModeId).toBe('plan');
+  });
+});
+
+describe('prompt queueing', () => {
+  it('serializes overlapping prompts and resolves them in order', async () => {
+    // Drive AmpAcpAgent directly (bypass JSON-RPC) so we can stub runPrompt
+    // without spawning amp subprocesses.
+    const fakeClient = new TestClient();
+    const agent = new AmpAcpAgent(fakeClient as unknown as Parameters<typeof AmpAcpAgent>[0]);
+
+    // Seed a session manually so we don't need to call newSession (which
+    // would shell out to `amp threads new`).
+    const sessionId = 'T-00000000-0000-0000-0000-000000000001';
+    agent.sessions.set(sessionId, {
+      threadId: sessionId,
+      controller: null,
+      cancelled: false,
+      active: false,
+      mode: 'default',
+      model: 'smart',
+      mcpConfig: {},
+      cwd: '/tmp',
+      queue: [],
+      draining: false,
+    });
+
+    const order: string[] = [];
+    let inflight = 0;
+    let maxInflight = 0;
+
+    (agent as unknown as { runPrompt: (p: PromptRequest) => Promise<PromptResponse> }).runPrompt =
+      async (p) => {
+        inflight++;
+        maxInflight = Math.max(maxInflight, inflight);
+        const tag = (p.prompt[0] as { text: string }).text;
+        await new Promise((r) => setTimeout(r, 20));
+        order.push(tag);
+        inflight--;
+        return { stopReason: 'end_turn' };
+      };
+
+    const mk = (text: string): PromptRequest => ({
+      sessionId,
+      prompt: [{ type: 'text', text }],
+    });
+
+    const results = await Promise.all([
+      agent.prompt(mk('a')),
+      agent.prompt(mk('b')),
+      agent.prompt(mk('c')),
+    ]);
+
+    expect(order).toEqual(['a', 'b', 'c']);
+    expect(maxInflight).toBe(1);
+    expect(results.every((r) => r.stopReason === 'end_turn')).toBe(true);
+  });
+
+  it('cancel rejects queued prompts as cancelled', async () => {
+    const fakeClient = new TestClient();
+    const agent = new AmpAcpAgent(fakeClient as unknown as Parameters<typeof AmpAcpAgent>[0]);
+    const sessionId = 'T-00000000-0000-0000-0000-000000000002';
+    agent.sessions.set(sessionId, {
+      threadId: sessionId,
+      controller: null,
+      cancelled: false,
+      active: false,
+      mode: 'default',
+      model: 'smart',
+      mcpConfig: {},
+      cwd: '/tmp',
+      queue: [],
+      draining: false,
+    });
+
+    let firstStarted = false;
+    (agent as unknown as { runPrompt: (p: PromptRequest) => Promise<PromptResponse> }).runPrompt =
+      async () => {
+        firstStarted = true;
+        const s = agent.sessions.get(sessionId)!;
+        s.active = true;
+        s.controller = new AbortController();
+        await new Promise<void>((resolve) => {
+          s.controller!.signal.addEventListener('abort', () => resolve());
+        });
+        s.active = false;
+        return { stopReason: 'cancelled' };
+      };
+
+    const p1 = agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'a' }] });
+    const p2 = agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'b' }] });
+
+    while (!firstStarted) await new Promise((r) => setTimeout(r, 5));
+    await agent.cancel({ sessionId });
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1.stopReason).toBe('cancelled');
+    expect(r2.stopReason).toBe('cancelled');
   });
 });
 
