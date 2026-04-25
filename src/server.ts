@@ -29,6 +29,7 @@ import {
 import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
+import { exportThread, exportedThreadToNotifications } from './export-thread.js';
 import path from 'node:path';
 import packageJson from '../package.json';
 
@@ -215,9 +216,18 @@ export class AmpAcpAgent implements Agent {
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
 
-    // Fetch history first; if Amp rejects the id, surface the error rather than
-    // registering a broken session.
-    const md = await threads.markdown({ threadId: params.sessionId });
+    // Try the structured export first (full tool_use/tool_result/thinking
+    // history); fall back to markdown parsing if the CLI doesn't support
+    // `threads export` or anything else goes wrong.
+    let notifications: SessionNotification[];
+    try {
+      const thread = await exportThread(params.sessionId);
+      notifications = exportedThreadToNotifications(thread, createAcpConversionState(cwd));
+    } catch (e) {
+      console.error('[acp] threads export failed, falling back to markdown:', e);
+      const md = await threads.markdown({ threadId: params.sessionId });
+      notifications = parseThreadMarkdown(md, params.sessionId);
+    }
 
     this.sessions.set(params.sessionId, {
       threadId: params.sessionId,
@@ -230,7 +240,7 @@ export class AmpAcpAgent implements Agent {
       cwd,
     });
 
-    for (const note of parseThreadMarkdown(md, params.sessionId)) {
+    for (const note of notifications) {
       await this.client.sessionUpdate(note);
     }
 
