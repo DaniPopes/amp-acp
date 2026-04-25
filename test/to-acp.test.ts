@@ -504,3 +504,65 @@ describe('toAcpNotifications: Read result uses adaptive fence', () => {
     expect(content[0].content.text).toContain('has ```inner``` fence');
   });
 });
+
+describe('toAcpNotifications: subagent nesting', () => {
+  it('collapses subagent tool_use into parent tool content and suppresses subagent text', () => {
+    const state = createAcpConversionState('/repo');
+    // Parent: oracle tool_use from main agent.
+    const parent = toAcpNotifications(
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'oracle1', name: 'oracle', input: { task: 'review' } }],
+        },
+      },
+      'S',
+      state,
+    );
+    expect(parent).toHaveLength(1);
+    expect(parent[0].update).toMatchObject({ sessionUpdate: 'tool_call', kind: 'think' });
+
+    // Subagent emits a Read tool_use under that parent.
+    const childUse = toAcpNotifications(
+      {
+        type: 'assistant',
+        parent_tool_use_id: 'oracle1',
+        message: {
+          content: [
+            { type: 'text', text: 'reading the file' },
+            { type: 'tool_use', id: 'r1', name: 'Read', input: { path: '/repo/a.ts' } },
+          ],
+        },
+      },
+      'S',
+      state,
+    );
+    // Subagent text suppressed; only a parent content update emitted.
+    expect(childUse).toHaveLength(1);
+    const u1 = childUse[0].update as Record<string, unknown>;
+    expect(u1.sessionUpdate).toBe('tool_call_update');
+    expect(u1.toolCallId).toBe('oracle1');
+    const content1 = (u1.content as Array<{ content: { text: string } }>)[0].content.text;
+    expect(content1).toContain('◐ Read a.ts');
+    expect(content1).toContain('1 running');
+
+    // Subagent's Read result completes — parent content updates again.
+    const childResult = toAcpNotifications(
+      {
+        type: 'user',
+        parent_tool_use_id: 'oracle1',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 'r1', content: 'ok', is_error: false }],
+        },
+      },
+      'S',
+      state,
+    );
+    expect(childResult).toHaveLength(1);
+    const u2 = childResult[0].update as Record<string, unknown>;
+    expect(u2.toolCallId).toBe('oracle1');
+    const content2 = (u2.content as Array<{ content: { text: string } }>)[0].content.text;
+    expect(content2).toContain('✓ Read a.ts');
+    expect(content2).toContain('1 done');
+  });
+});

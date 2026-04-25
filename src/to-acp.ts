@@ -55,6 +55,116 @@ interface AmpMessage {
     content: string | AmpContentBlock[];
   };
   session_id?: string;
+  /** Set on subagent messages — the id of the parent tool_use (oracle / Task / librarian / …). */
+  parent_tool_use_id?: string | null;
+}
+
+interface NestedChild {
+  parentToolUseId: string;
+  name: string;
+  input: Record<string, unknown>;
+  status: 'running' | 'completed' | 'failed';
+}
+
+interface NestedParentStats {
+  total: number;
+  completed: number;
+  failed: number;
+  children: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    status: 'running' | 'completed' | 'failed';
+  }>;
+}
+
+/**
+ * Tracks tool_use calls emitted by subagents (oracle / Task / librarian / …).
+ *
+ * Without this, a subagent's tool calls surface as orphan top-level
+ * `tool_call`s and the parent oracle/Task tool sits with empty content
+ * "in progress" until the wall of result text arrives at the end. With this,
+ * we suppress the child `tool_call`s and instead update the parent's content
+ * with a running progress summary.
+ */
+class NestedToolTracker {
+  private childTools = new Map<string, NestedChild>();
+  private parentStats = new Map<string, NestedParentStats>();
+  private readonly maxVisibleCompleted = 3;
+  private readonly maxVisibleFailed = 5;
+
+  registerChild(
+    childId: string,
+    parentId: string,
+    name: string,
+    input: Record<string, unknown>,
+  ): void {
+    let stats = this.parentStats.get(parentId);
+    if (!stats) {
+      stats = { total: 0, completed: 0, failed: 0, children: [] };
+      this.parentStats.set(parentId, stats);
+    }
+    stats.total++;
+    stats.children.push({ id: childId, name, input, status: 'running' });
+    this.childTools.set(childId, { parentToolUseId: parentId, name, input, status: 'running' });
+  }
+
+  completeChild(childId: string, isError: boolean): NestedChild | undefined {
+    const child = this.childTools.get(childId);
+    if (!child) return undefined;
+    child.status = isError ? 'failed' : 'completed';
+    const stats = this.parentStats.get(child.parentToolUseId);
+    if (stats) {
+      if (isError) stats.failed++;
+      else stats.completed++;
+      const entry = stats.children.find((c) => c.id === childId);
+      if (entry) entry.status = child.status;
+    }
+    return child;
+  }
+
+  isChildTool(childId: string): boolean {
+    return this.childTools.has(childId);
+  }
+
+  getContentArray(parentId: string, cwd?: string): ToolCallContent[] {
+    const stats = this.parentStats.get(parentId);
+    if (!stats) return [];
+    const lines: string[] = [];
+    const running = stats.children.filter((c) => c.status === 'running');
+    const failed = stats.children.filter((c) => c.status === 'failed');
+    const completed = stats.children.filter((c) => c.status === 'completed');
+
+    for (const c of running) lines.push(`◐ ${inlineToolDescription(c.name, c.input, cwd)}`);
+
+    if (failed.length > this.maxVisibleFailed) {
+      const firstCount = Math.min(2, this.maxVisibleFailed);
+      const lastCount = Math.max(0, this.maxVisibleFailed - firstCount);
+      for (const c of failed.slice(0, firstCount))
+        lines.push(`✗ ${inlineToolDescription(c.name, c.input, cwd)}`);
+      lines.push(`✗ ... ${failed.length - this.maxVisibleFailed} more failed`);
+      if (lastCount > 0)
+        for (const c of failed.slice(-lastCount))
+          lines.push(`✗ ${inlineToolDescription(c.name, c.input, cwd)}`);
+    } else {
+      for (const c of failed) lines.push(`✗ ${inlineToolDescription(c.name, c.input, cwd)}`);
+    }
+
+    const hiddenCompleted = completed.length - this.maxVisibleCompleted;
+    if (hiddenCompleted > 0) lines.push(`✓ ... ${hiddenCompleted} more completed`);
+    for (const c of completed.slice(-this.maxVisibleCompleted))
+      lines.push(`✓ ${inlineToolDescription(c.name, c.input, cwd)}`);
+
+    const doneCount = stats.completed + stats.failed;
+    const runningCount = stats.total - doneCount;
+    const parts: string[] = [];
+    if (runningCount > 0) parts.push(`${runningCount} running`);
+    if (stats.completed > 0) parts.push(`${stats.completed} done`);
+    if (stats.failed > 0) parts.push(`${stats.failed} failed`);
+    if (parts.length > 0) lines.push(`── ${parts.join(', ')} (${doneCount}/${stats.total}) ──`);
+
+    return [{ type: 'content', content: { type: 'text', text: lines.join('\n') } }];
+  }
 }
 
 export interface AcpConversionState {
@@ -63,13 +173,24 @@ export interface AcpConversionState {
   supportsTerminalOutput?: boolean;
   /** tool_use_id -> tool name, used to render results in a tool-aware way. */
   toolNamesById: Map<string, string>;
+  /** Tracks subagent tool calls so we can render them inline on the parent. */
+  nestedTracker: NestedToolTracker;
 }
 
 export function createAcpConversionState(
   cwd?: string,
   supportsTerminalOutput = false,
 ): AcpConversionState {
-  return { cwd, supportsTerminalOutput, toolNamesById: new Map() };
+  return {
+    cwd,
+    supportsTerminalOutput,
+    toolNamesById: new Map(),
+    nestedTracker: new NestedToolTracker(),
+  };
+}
+
+function inlineToolDescription(name: string, input: Record<string, unknown>, cwd?: string): string {
+  return titleForTool(name, input, cwd);
 }
 
 const MAX_TITLE_LENGTH = 256;
@@ -97,11 +218,20 @@ export function toAcpNotifications(
   }
   const output: SessionNotification[] = [];
   if (!Array.isArray(content)) return output;
+  // When set, every chunk in this message originated from a subagent (oracle /
+  // Task / librarian / …) running under the named parent tool. We collapse
+  // such activity into the parent's content so the user sees live progress
+  // instead of orphan top-level tool calls.
+  const subagentParentId = message.parent_tool_use_id;
   for (const chunk of content) {
     let update: SessionNotification['update'] | null = null;
     if (role === 'user' && chunk.type !== 'tool_result') continue;
     switch (chunk.type) {
       case 'text':
+        // Subagent narration is internal — its summary will arrive in the
+        // parent tool's tool_result. Emitting it as agent_message_chunk
+        // would interleave it with the main agent's output.
+        if (subagentParentId) break;
         update = {
           sessionUpdate: 'agent_message_chunk',
           content: { type: 'text', text: chunk.text } as ContentBlock,
@@ -119,6 +249,7 @@ export function toAcpNotifications(
         };
         break;
       case 'thinking':
+        if (subagentParentId) break;
         update = {
           sessionUpdate: 'agent_thought_chunk',
           content: { type: 'text', text: chunk.thinking } as ContentBlock,
@@ -127,6 +258,22 @@ export function toAcpNotifications(
       case 'tool_use': {
         const input = (chunk.input ?? {}) as Record<string, unknown>;
         state.toolNamesById.set(chunk.id, chunk.name);
+
+        // Subagent tool call: register it on the parent and emit a
+        // tool_call_update against the parent's content. Don't emit a
+        // separate top-level tool_call.
+        if (subagentParentId) {
+          state.nestedTracker.registerChild(chunk.id, subagentParentId, chunk.name, input);
+          output.push({
+            sessionId,
+            update: {
+              toolCallId: subagentParentId,
+              sessionUpdate: 'tool_call_update' as const,
+              content: state.nestedTracker.getContentArray(subagentParentId, state.cwd),
+            },
+          });
+          break;
+        }
 
         // todo_write becomes a `plan` update, not a tool_call.
         if (chunk.name === 'todo_write') {
@@ -176,6 +323,24 @@ export function toAcpNotifications(
       }
       case 'tool_result': {
         const toolName = state.toolNamesById.get(chunk.tool_use_id);
+
+        // Subagent tool result: update the parent tool's content with the
+        // new completed/failed status. Don't emit a tool_call_update for the
+        // child id (it never had a tool_call to begin with).
+        const child = state.nestedTracker.isChildTool(chunk.tool_use_id)
+          ? state.nestedTracker.completeChild(chunk.tool_use_id, chunk.is_error)
+          : undefined;
+        if (child) {
+          output.push({
+            sessionId,
+            update: {
+              toolCallId: child.parentToolUseId,
+              sessionUpdate: 'tool_call_update' as const,
+              content: state.nestedTracker.getContentArray(child.parentToolUseId, state.cwd),
+            },
+          });
+          break;
+        }
 
         // todo_write results carry no useful info for the UI; the plan was already shown.
         if (toolName === 'todo_write') break;
