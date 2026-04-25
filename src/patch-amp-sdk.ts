@@ -3,6 +3,13 @@
 // enable thinking blocks. Without -thinking, Amp never emits `thinking`
 // content blocks and our agent_thought_chunk path is dead.
 //
+// It also has a second annoying behaviour: passing AmpOptions.mode (model
+// selection) makes buildSettingsFile() create `<cwd>/.tmp/sdk-*/settings.json`
+// (with empty contents, because `mode` isn't actually written into that file)
+// which pollutes the user's workspace. We avoid this by NOT passing
+// options.mode to the SDK and instead injecting `--mode <value>` here when
+// the AMP_ACP_MODE env var is set.
+//
 // Monkey-patching child_process.spawn does NOT work: the SDK uses ESM named
 // imports (`import { spawn } from 'node:child_process'`) which snapshot the
 // original `spawn` at import time, so mutating `child_process.spawn` later
@@ -10,8 +17,7 @@
 //
 // Instead we use the SDK's officially supported `AMP_CLI_PATH` env var (see
 // resolveCliFromEnvironment in @sourcegraph/amp-sdk) to point at a wrapper
-// script that swaps --stream-json for --stream-json-thinking before
-// invoking the real `amp` from PATH.
+// script that rewrites the args before invoking the real `amp` from PATH.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,6 +26,9 @@ const WRAPPER_SOURCE = `#!/usr/bin/env node
 import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2).map((a) => (a === '--stream-json' ? '--stream-json-thinking' : a));
+if (process.env.AMP_ACP_MODE && !args.includes('--mode')) {
+  args.push('--mode', process.env.AMP_ACP_MODE);
+}
 const child = spawn('amp', args, { stdio: 'inherit' });
 child.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);
