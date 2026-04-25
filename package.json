@@ -18,6 +18,7 @@
   },
   "scripts": {
     "build": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs",
+    "prepare": "bun run build",
     "build:binary": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs && bun build dist/index.js --compile --outfile dist/amp-acp",
     "start": "bun dist/index.js",
     "lint": "biome check && tsc --noEmit",
