@@ -621,16 +621,19 @@ export class AmpAcpAgent implements Agent {
     }
   }
 
+  /** Cleanly tear down a session: cancel in-flight work and remove it from
+   * the session map. Shared between closeSession and dispose. */
+  private async teardownSession(sessionId: string): Promise<void> {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    await this.cancel({ sessionId });
+    this.sessions.delete(sessionId);
+  }
+
   /** Tear down all active sessions. Called when the ACP connection closes
    * (stdin EOF) or on SIGTERM/SIGINT to avoid orphaning amp subprocesses. */
   async dispose(): Promise<void> {
-    for (const [sessionId, s] of this.sessions) {
-      if (s.active && s.controller) {
-        s.cancelled = true;
-        s.controller.abort();
-      }
-      this.sessions.delete(sessionId);
-    }
+    await Promise.all([...this.sessions.keys()].map((id) => this.teardownSession(id)));
   }
 
   async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
@@ -722,13 +725,7 @@ export class AmpAcpAgent implements Agent {
   }
 
   async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) return {};
-    if (s.active && s.controller) {
-      s.cancelled = true;
-      s.controller.abort();
-    }
-    this.sessions.delete(params.sessionId);
+    await this.teardownSession(params.sessionId);
     return {};
   }
 
