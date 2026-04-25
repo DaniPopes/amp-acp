@@ -19,6 +19,8 @@ import {
   type LoadSessionResponse,
   type ResumeSessionRequest,
   type ResumeSessionResponse,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type CloseSessionRequest,
   type CloseSessionResponse,
   type ListSessionsRequest,
@@ -34,6 +36,7 @@ import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
+import { forkAmpThread } from './fork-thread.js';
 import { listAmpThreads, relativeToIso } from './list-threads.js';
 import path from 'node:path';
 import packageJson from '../package.json';
@@ -141,6 +144,7 @@ export class AmpAcpAgent implements Agent {
           close: {},
           list: {},
           resume: {},
+          fork: {},
         },
         promptCapabilities: { image: true, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
@@ -254,6 +258,56 @@ export class AmpAcpAgent implements Agent {
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
 
     return {
+      modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
+      models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+    };
+  }
+
+  async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
+    }
+
+    const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
+    const cwd = params.cwd || process.cwd();
+
+    let newThreadId: string;
+    try {
+      newThreadId = await forkAmpThread(params.sessionId);
+    } catch (e) {
+      throw new RequestError(-32603, `amp threads handoff failed: ${(e as Error).message}`);
+    }
+
+    this.sessions.set(newThreadId, {
+      threadId: newThreadId,
+      controller: null,
+      cancelled: false,
+      active: false,
+      mode: 'default',
+      model: 'smart',
+      mcpConfig,
+      cwd,
+    });
+
+    // Replay the source thread's history to the client so the user sees the
+    // prior conversation in the new session pane. The handoff already injected
+    // a synthesized "context" turn into the new amp thread, so future prompts
+    // on newThreadId will continue against that handoff context server-side.
+    try {
+      const thread = await exportThread(params.sessionId);
+      const notifications = exportedThreadToNotifications(thread, createAcpConversionState(cwd));
+      // Rewrite sessionId in each notification to point at the new session.
+      for (const note of notifications) {
+        await this.client.sessionUpdate({ ...note, sessionId: newThreadId });
+      }
+    } catch (e) {
+      console.error('[acp] forkSession: failed to replay source history:', e);
+    }
+
+    setImmediate(() => this.sendAvailableCommandsUpdate(newThreadId));
+
+    return {
+      sessionId: newThreadId,
       modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
       models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
     };
