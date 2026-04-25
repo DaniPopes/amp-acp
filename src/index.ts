@@ -79,7 +79,23 @@ if (process.argv.includes('--setup')) {
     }
   }
 
-  runAcp();
+  const { connection, agent } = runAcp();
+
+  async function shutdown(): Promise<void> {
+    try {
+      await agent.dispose();
+    } catch (err) {
+      console.error('Error during cleanup:', err);
+    }
+    process.exit(0);
+  }
+
+  // Exit cleanly when the ACP connection closes (e.g. stdin EOF, transport
+  // error). Without this, `process.stdin.resume()` keeps the event loop alive
+  // indefinitely and any active amp subprocesses get orphaned.
+  connection.closed.then(shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   process.stdin.resume();
 }

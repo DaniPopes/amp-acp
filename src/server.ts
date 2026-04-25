@@ -621,6 +621,18 @@ export class AmpAcpAgent implements Agent {
     }
   }
 
+  /** Tear down all active sessions. Called when the ACP connection closes
+   * (stdin EOF) or on SIGTERM/SIGINT to avoid orphaning amp subprocesses. */
+  async dispose(): Promise<void> {
+    for (const [sessionId, s] of this.sessions) {
+      if (s.active && s.controller) {
+        s.cancelled = true;
+        s.controller.abort();
+      }
+      this.sessions.delete(sessionId);
+    }
+  }
+
   async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
     const s = this.sessions.get(params.sessionId);
     if (!s) throw new Error('Session not found');
