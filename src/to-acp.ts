@@ -140,7 +140,11 @@ export function toAcpNotifications(
         // Bash with terminal_output capability: render as a live terminal widget.
         if (chunk.name === 'Bash' && state.supportsTerminalOutput) {
           const terminalId = chunk.id;
-          const bashCwd = firstString(input, ['cwd']) ?? state.cwd;
+          const bashCwd = firstString(input, ['cwd']);
+          // Only include cwd in terminal_info when it differs from the project
+          // root; otherwise Zed renders it as the widget title (redundant noise).
+          const includeCwd =
+            bashCwd && state.cwd && path.resolve(state.cwd, bashCwd) !== path.resolve(state.cwd);
           update = {
             toolCallId: chunk.id,
             sessionUpdate: 'tool_call' as const,
@@ -150,7 +154,7 @@ export function toAcpNotifications(
             kind: 'execute' as const,
             content: [{ type: 'terminal' as const, terminalId }],
             _meta: {
-              terminal_info: bashCwd
+              terminal_info: includeCwd
                 ? { terminal_id: terminalId, cwd: bashCwd }
                 : { terminal_id: terminalId },
             },

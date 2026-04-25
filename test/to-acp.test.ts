@@ -299,7 +299,7 @@ describe('toAcpNotifications: Bash terminal widget', () => {
     expect(upd.kind).toBe('execute');
     expect(upd.title).toBe('ls');
     expect(upd.content).toEqual([{ type: 'terminal', terminalId: 'b1' }]);
-    expect(upd._meta).toEqual({ terminal_info: { terminal_id: 'b1', cwd: '/repo' } });
+    expect(upd._meta).toEqual({ terminal_info: { terminal_id: 'b1' } });
   });
 
   it('emits terminal_output then terminal_exit on tool_result', () => {
