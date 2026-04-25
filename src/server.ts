@@ -17,6 +17,8 @@ import {
   type SetSessionModelResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
+  type CloseSessionRequest,
+  type CloseSessionResponse,
   type ReadTextFileRequest,
   type ReadTextFileResponse,
   type WriteTextFileRequest,
@@ -129,6 +131,9 @@ export class AmpAcpAgent implements Agent {
       },
       agentCapabilities: {
         loadSession: true,
+        sessionCapabilities: {
+          close: {},
+        },
         promptCapabilities: { image: true, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
       },
@@ -418,6 +423,17 @@ export class AmpAcpAgent implements Agent {
       throw new RequestError(-32602, `Unknown mode: ${params.modeId}`);
     }
     s.mode = params.modeId;
+    return {};
+  }
+
+  async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
+    const s = this.sessions.get(params.sessionId);
+    if (!s) return {};
+    if (s.active && s.controller) {
+      s.cancelled = true;
+      s.controller.abort();
+    }
+    this.sessions.delete(params.sessionId);
     return {};
   }
 
