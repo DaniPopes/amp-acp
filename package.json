@@ -17,8 +17,8 @@
     "url": "https://github.com/tao12345666333/amp-acp"
   },
   "scripts": {
-    "build": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js",
-    "build:binary": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && bun build dist/index.js --compile --outfile dist/amp-acp",
+    "build": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs",
+    "build:binary": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs && bun build dist/index.js --compile --outfile dist/amp-acp",
     "start": "bun dist/index.js",
     "lint": "tsc --noEmit",
     "test": "bun test test/*.test.ts",

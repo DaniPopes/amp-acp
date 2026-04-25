@@ -372,12 +372,8 @@ export class AmpAcpAgent implements Agent {
 
     const options: Record<string, unknown> = {
       cwd: s.cwd,
-      // AMP_ACP_MODE is consumed by the AMP_CLI_PATH wrapper (patch-amp-sdk.ts)
-      // which appends `--mode <value>` to the amp invocation. We do this
-      // instead of passing `mode` in AmpOptions because the SDK's
-      // buildSettingsFile() creates an empty `<cwd>/.tmp/sdk-*/settings.json`
-      // whenever options.mode is set, polluting the workspace.
-      env: { TERM: 'dumb', AMP_ACP_MODE: s.model },
+      env: { TERM: 'dumb' },
+      mode: s.model,
     };
 
     if (s.mode === 'bypass') {
