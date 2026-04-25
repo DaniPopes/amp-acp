@@ -26,7 +26,7 @@
     "test:all": "bun run test && bun run test:binary"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "0.4.8",
+    "@agentclientprotocol/sdk": "0.20.0",
     "@sourcegraph/amp": "^0.0.1765685598-g5365e6",
     "@sourcegraph/amp-sdk": "0.1.0-20260220044036-g88868e6"
   },
