@@ -420,7 +420,7 @@ export class AmpAcpAgent implements Agent {
     }
   }
 
-  async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+  async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
     const s = this.sessions.get(params.sessionId);
     if (!s) throw new Error('Session not found');
     if (!AVAILABLE_MODELS.some((m) => m.modelId === params.modelId)) {
