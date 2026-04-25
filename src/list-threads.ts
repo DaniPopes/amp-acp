@@ -8,8 +8,8 @@ export interface AmpThreadListEntry {
   title: string | null;
   updatedAt: string;
   messageCount: number;
-  /** Absolute path to the thread's working directory, if recorded. */
-  cwd: string | null;
+  /** Absolute path to the thread's working directory. Falls back to `process.cwd()` when amp didn't record one (or the recorded URI was unparseable). */
+  cwd: string;
 }
 
 interface RawAmpThread {
@@ -44,12 +44,13 @@ export function parseAmpThreadList(output: string): AmpThreadListEntry[] {
   const trimmed = output.trim();
   if (!trimmed) return [];
   const raw = JSON.parse(trimmed) as RawAmpThread[];
+  const fallbackCwd = process.cwd();
   return raw.map((r) => ({
     threadId: r.id,
     title: r.title,
     updatedAt: r.updated,
     messageCount: r.messageCount,
-    cwd: treeUriToPath(r.tree),
+    cwd: treeUriToPath(r.tree) ?? fallbackCwd,
   }));
 }
 

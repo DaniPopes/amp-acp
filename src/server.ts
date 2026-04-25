@@ -725,16 +725,14 @@ export class AmpAcpAgent implements Agent {
     // The Amp CLI doesn't expose pagination; ignore params.cursor.
     // params.cwd / additionalDirectories are ignored — we return all threads
     // and let the client filter. Per-thread cwd comes from the `tree` field
-    // on each list entry; if absent (older threads, or no recorded tree),
-    // we fall back to process.cwd().
+    // on each list entry (with a process.cwd() fallback in listAmpThreads).
     void params;
-    const fallbackCwd = process.cwd();
     try {
       const entries = await listAmpThreads();
       return {
         sessions: entries.map((e) => ({
           sessionId: e.threadId,
-          cwd: e.cwd ?? fallbackCwd,
+          cwd: e.cwd,
           title: e.title,
           updatedAt: e.updatedAt,
         })),

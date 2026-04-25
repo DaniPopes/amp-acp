@@ -36,7 +36,7 @@ describe('parseAmpThreadList', () => {
       cwd: '/home/doni/github/danipopes/amp-acp',
     });
     expect(out[1].title).toBeNull();
-    expect(out[1].cwd).toBeNull();
+    expect(out[1].cwd).toBe(process.cwd()); // falls back when no tree
     expect(out[2].cwd).toBe('/tmp/work');
     expect(out[2].messageCount).toBe(14);
   });
