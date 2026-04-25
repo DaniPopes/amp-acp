@@ -6,9 +6,6 @@
 // thinking, tool_use, and tool_result blocks — so loadSession can replay a
 // faithful structured history instead of just user/assistant text.
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 
@@ -31,37 +28,22 @@ interface ExportedThread {
 }
 
 export async function exportThread(threadId: string): Promise<ExportedThread> {
-  // amp truncates output at ~64KB when stdout is a pipe — that's the default
-  // Linux pipe buffer size, so amp likely exits before draining stdout.
-  // Workaround: write directly to a temp file fd and read it back.
-  const tmpFile = path.join(
-    os.tmpdir(),
-    `amp-export-${threadId}-${process.pid}-${Date.now()}.json`,
-  );
-  const fd = fs.openSync(tmpFile, 'w');
-  try {
-    const child = spawn('amp', ['threads', 'export', threadId], {
-      stdio: ['ignore', fd, 'pipe'],
-    });
-    const stderrChunks: Buffer[] = [];
-    child.stderr?.on('data', (b: Buffer) => stderrChunks.push(b));
-    const exitCode: number = await new Promise((resolve, reject) => {
-      child.on('error', reject);
-      child.on('close', (c) => resolve(c ?? 1));
-    });
-    fs.closeSync(fd);
+  const child = spawn('amp', ['threads', 'export', threadId], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+  child.stdout.on('data', (b: Buffer) => stdoutChunks.push(b));
+  child.stderr.on('data', (b: Buffer) => stderrChunks.push(b));
+  const exitCode: number = await new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', (c) => resolve(c ?? 1));
+  });
+  if (exitCode !== 0) {
     const stderr = Buffer.concat(stderrChunks).toString('utf8');
-    if (exitCode !== 0) {
-      throw new Error(`amp threads export ${threadId} failed (${exitCode}): ${stderr.trim()}`);
-    }
-    return JSON.parse(fs.readFileSync(tmpFile, 'utf8')) as ExportedThread;
-  } finally {
-    try {
-      fs.unlinkSync(tmpFile);
-    } catch {
-      /* ignore */
-    }
+    throw new Error(`amp threads export ${threadId} failed (${exitCode}): ${stderr.trim()}`);
   }
+  return JSON.parse(Buffer.concat(stdoutChunks).toString('utf8')) as ExportedThread;
 }
 
 /** Convert exported thread JSON into ACP notifications, reusing toAcpNotifications. */

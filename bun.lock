@@ -5,7 +5,7 @@
       "name": "amp-acp",
       "dependencies": {
         "@agentclientprotocol/sdk": "0.20.0",
-        "@sourcegraph/amp": "0.0.1777141456-gd5ca69",
+        "@sourcegraph/amp": "0.0.1777144048-gff4795",
         "@sourcegraph/amp-sdk": "0.1.0-20260425174754-gdaa8b1f",
       },
       "devDependencies": {
@@ -62,7 +62,7 @@
 
     "@napi-rs/keyring-win32-x64-msvc": ["@napi-rs/keyring-win32-x64-msvc@1.1.10", "", { "os": "win32", "cpu": "x64" }, "sha512-T02DfUUvp3epOJ5lC7hcM5ff6xaLhIfymBf0LEa0oQMi+yCVoDrgjeKeGCUGwtVJWfphu58Tf9twX+hRiAD0dg=="],
 
-    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1777141456-gd5ca69", "", { "dependencies": { "@napi-rs/keyring": "1.1.10" }, "bin": { "amp": "dist/main.js" } }, "sha512-P3j2OAGFkPtU1zuFuGxmXhksBpQXDmvFQXz/xhLB+WL7jl6fKE81uGQ7RPAoaquAb6LbuB7k/qXUg0lEGzCb8w=="],
+    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1777144048-gff4795", "", { "dependencies": { "@napi-rs/keyring": "1.1.10" }, "bin": { "amp": "dist/main.js" } }, "sha512-9yLf/Ce8Y9Vj7qcAmX0C48lCk2sz2ziaZ77ZXkWbd6xwKKiY/ZcrH7UcoYlmve6ebe0s0qTwguT3chjrMSa6Gg=="],
 
     "@sourcegraph/amp-sdk": ["@sourcegraph/amp-sdk@0.1.0-20260425174754-gdaa8b1f", "", { "dependencies": { "zod": "^3.23.8" }, "bin": { "amp-sdk": "bin/amp-sdk.js" } }, "sha512-wn927Hp+eHn6cPzpR3EP3eYPS2flIgJbv74uISxIfTrFDX7xbtRhktic0cXSBWv9BgPAUl7Xd0jxzvx0o8atGg=="],
 
