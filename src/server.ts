@@ -17,6 +17,8 @@ import {
   type SetSessionModelResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
   type CloseSessionRequest,
   type CloseSessionResponse,
   type ListSessionsRequest,
@@ -138,6 +140,7 @@ export class AmpAcpAgent implements Agent {
         sessionCapabilities: {
           close: {},
           list: {},
+          resume: {},
         },
         promptCapabilities: { image: true, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
@@ -247,6 +250,33 @@ export class AmpAcpAgent implements Agent {
     for (const note of notifications) {
       await this.client.sessionUpdate(note);
     }
+
+    setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
+
+    return {
+      modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
+      models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+    };
+  }
+
+  async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
+    }
+
+    const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
+    const cwd = params.cwd || process.cwd();
+
+    this.sessions.set(params.sessionId, {
+      threadId: params.sessionId,
+      controller: null,
+      cancelled: false,
+      active: false,
+      mode: 'default',
+      model: 'smart',
+      mcpConfig,
+      cwd,
+    });
 
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
 
