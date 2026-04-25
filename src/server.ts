@@ -42,10 +42,25 @@ import { toAcpNotifications, createAcpConversionState, type AcpConversionState }
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
 import { forkAmpThread } from './fork-thread.js';
 import { listAmpThreads, relativeToIso } from './list-threads.js';
+import { loadStoredApiKey } from './credentials.js';
 import path from 'node:path';
 import packageJson from '../package.json';
 
 const PACKAGE_VERSION: string = packageJson.version;
+
+const THREAD_ID_RE = /^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertThreadId(id: string): void {
+  if (!THREAD_ID_RE.test(id)) {
+    throw new RequestError(-32602, `Invalid thread ID: ${id}. Expected T-{uuid}.`);
+  }
+}
+
+function detectTerminalOutputCapability(caps: ClientCapabilities | undefined): boolean {
+  return (
+    (caps as { _meta?: { terminal_output?: boolean } } | undefined)?._meta?.terminal_output === true
+  );
+}
 
 interface SessionState {
   threadId: string | null;
@@ -239,7 +254,9 @@ export class AmpAcpAgent implements Agent {
           resume: {},
           fork: {},
         },
-        promptCapabilities: { image: true, embeddedContext: true },
+        // image: false until prompt() actually forwards image chunks to amp;
+        // currently the image case is dropped on the floor (see prompt()).
+        promptCapabilities: { image: false, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
       },
       authMethods,
@@ -301,14 +318,11 @@ export class AmpAcpAgent implements Agent {
     // Reject anything that isn't an Amp thread id up-front so Zed surfaces the
     // error at thread-open time instead of silently failing on the first
     // prompt (when we'd pass it as `continue:` to Amp).
-    if (
-      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
-    ) {
-      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
-    }
+    assertThreadId(params.sessionId);
 
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
+    const supportsTerminalOutput = detectTerminalOutputCapability(this.clientCapabilities);
 
     // Try the structured export first (full tool_use/tool_result/thinking
     // history); fall back to markdown parsing if the CLI doesn't support
@@ -316,7 +330,10 @@ export class AmpAcpAgent implements Agent {
     let notifications: SessionNotification[];
     try {
       const thread = await exportThread(params.sessionId);
-      notifications = exportedThreadToNotifications(thread, createAcpConversionState(cwd));
+      notifications = exportedThreadToNotifications(
+        thread,
+        createAcpConversionState(cwd, supportsTerminalOutput),
+      );
     } catch (e) {
       console.error('[acp] threads export failed, falling back to markdown:', e);
       const md = await threads.markdown({ threadId: params.sessionId });
@@ -348,14 +365,11 @@ export class AmpAcpAgent implements Agent {
   }
 
   async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
-    if (
-      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
-    ) {
-      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
-    }
+    assertThreadId(params.sessionId);
 
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
+    const supportsTerminalOutput = detectTerminalOutputCapability(this.clientCapabilities);
 
     let newThreadId: string;
     try {
@@ -381,7 +395,10 @@ export class AmpAcpAgent implements Agent {
     // on newThreadId will continue against that handoff context server-side.
     try {
       const thread = await exportThread(params.sessionId);
-      const notifications = exportedThreadToNotifications(thread, createAcpConversionState(cwd));
+      const notifications = exportedThreadToNotifications(
+        thread,
+        createAcpConversionState(cwd, supportsTerminalOutput),
+      );
       // Rewrite sessionId in each notification to point at the new session.
       for (const note of notifications) {
         await this.client.sessionUpdate({ ...note, sessionId: newThreadId });
@@ -401,11 +418,11 @@ export class AmpAcpAgent implements Agent {
   }
 
   async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-    if (
-      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
-    ) {
-      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
-    }
+    // Per ACP spec, session/resume re-attaches to a thread WITHOUT replaying
+    // history (unlike session/load). The client already has the prior turns
+    // on screen; we only re-establish server-side state so the next prompt
+    // continues against the existing thread.
+    assertThreadId(params.sessionId);
 
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
@@ -444,12 +461,19 @@ export class AmpAcpAgent implements Agent {
     if (process.env.AMP_API_KEY) {
       return {};
     }
+    // Setup runs in a separate terminal process and writes credentials.json,
+    // so by the time the client calls authenticate() back, our env var may be
+    // stale. Re-read the on-disk credentials before giving up.
+    const stored = loadStoredApiKey();
+    if (stored) {
+      process.env.AMP_API_KEY = stored;
+      return {};
+    }
     throw RequestError.authRequired();
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) throw new Error('Session not found');
+    const s = this.getSession(params.sessionId);
     s.cancelled = false;
     s.active = true;
 
@@ -486,14 +510,7 @@ export class AmpAcpAgent implements Agent {
         textInput = INIT_PROMPT;
       } else if (COMMAND_TO_MODE[cmdName]) {
         const newMode = COMMAND_TO_MODE[cmdName];
-        s.mode = newMode;
-        await this.client.sessionUpdate({
-          sessionId: params.sessionId,
-          update: {
-            sessionUpdate: 'current_mode_update',
-            currentModeId: newMode,
-          },
-        });
+        await this.applyPermissionMode(params.sessionId, s, newMode);
         if (argText) {
           textInput = argText + '\n';
         } else {
@@ -551,9 +568,7 @@ export class AmpAcpAgent implements Agent {
     const controller = new AbortController();
     s.controller = controller;
 
-    const supportsTerminalOutput =
-      (this.clientCapabilities as { _meta?: { terminal_output?: boolean } } | undefined)?._meta
-        ?.terminal_output === true;
+    const supportsTerminalOutput = detectTerminalOutputCapability(this.clientCapabilities);
     const acpState: AcpConversionState = createAcpConversionState(s.cwd, supportsTerminalOutput);
 
     try {
@@ -636,41 +651,59 @@ export class AmpAcpAgent implements Agent {
     await Promise.all([...this.sessions.keys()].map((id) => this.teardownSession(id)));
   }
 
-  async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) throw new Error('Session not found');
-    if (!AVAILABLE_MODELS.some((m) => m.modelId === params.modelId)) {
-      throw new RequestError(-32602, `Unknown model: ${params.modelId}`);
-    }
-    s.model = params.modelId;
-    return {};
+  private getSession(sessionId: string): SessionState {
+    const s = this.sessions.get(sessionId);
+    if (!s) throw new RequestError(-32602, `Unknown session: ${sessionId}`);
+    return s;
   }
 
-  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) throw new Error('Session not found');
-    if (!AVAILABLE_MODES.some((m) => m.id === params.modeId)) {
-      throw new RequestError(-32602, `Unknown mode: ${params.modeId}`);
+  /** Apply a permission-mode change and notify the client so its mode
+   * indicator re-renders without waiting for the next turn. Shared between
+   * setSessionMode, setSessionConfigOption('mode'), and slash commands. */
+  private async applyPermissionMode(
+    sessionId: string,
+    s: SessionState,
+    modeId: string,
+  ): Promise<void> {
+    if (!AVAILABLE_MODES.some((m) => m.id === modeId)) {
+      throw new RequestError(-32602, `Unknown mode: ${modeId}`);
     }
-    s.mode = params.modeId;
-    // Notify the client so its mode indicator re-renders without waiting for
-    // the next turn.
+    s.mode = modeId;
     try {
       await this.client.sessionUpdate({
-        sessionId: params.sessionId,
-        update: { sessionUpdate: 'current_mode_update', currentModeId: params.modeId },
+        sessionId,
+        update: { sessionUpdate: 'current_mode_update', currentModeId: modeId },
       });
     } catch (e) {
       console.error('[acp] failed to send current_mode_update', e);
     }
+  }
+
+  private setModel(s: SessionState, modelId: string): void {
+    if (!AVAILABLE_MODELS.some((m) => m.modelId === modelId)) {
+      throw new RequestError(-32602, `Unknown model: ${modelId}`);
+    }
+    s.model = modelId;
+  }
+
+  async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    this.setModel(this.getSession(params.sessionId), params.modelId);
+    return {};
+  }
+
+  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
+    await this.applyPermissionMode(
+      params.sessionId,
+      this.getSession(params.sessionId),
+      params.modeId,
+    );
     return {};
   }
 
   async setSessionConfigOption(
     params: SetSessionConfigOptionRequest,
   ): Promise<SetSessionConfigOptionResponse> {
-    const s = this.sessions.get(params.sessionId);
-    if (!s) throw new Error('Session not found');
+    const s = this.getSession(params.sessionId);
     if (typeof params.value !== 'string') {
       throw new RequestError(
         -32602,
@@ -678,23 +711,9 @@ export class AmpAcpAgent implements Agent {
       );
     }
     if (params.configId === 'mode') {
-      if (!AVAILABLE_MODES.some((m) => m.id === params.value)) {
-        throw new RequestError(-32602, `Unknown mode: ${params.value}`);
-      }
-      s.mode = params.value;
-      try {
-        await this.client.sessionUpdate({
-          sessionId: params.sessionId,
-          update: { sessionUpdate: 'current_mode_update', currentModeId: params.value },
-        });
-      } catch (e) {
-        console.error('[acp] failed to send current_mode_update', e);
-      }
+      await this.applyPermissionMode(params.sessionId, s, params.value);
     } else if (params.configId === 'model') {
-      if (!AVAILABLE_MODELS.some((m) => m.modelId === params.value)) {
-        throw new RequestError(-32602, `Unknown model: ${params.value}`);
-      }
-      s.model = params.value;
+      this.setModel(s, params.value);
     } else {
       throw new RequestError(-32602, `Unknown config option: ${params.configId}`);
     }
@@ -719,8 +738,11 @@ export class AmpAcpAgent implements Agent {
         })),
       };
     } catch (err) {
-      console.error('[acp] listSessions failed:', err);
-      return { sessions: [] };
+      // Don't return an empty list on failure: the client can't distinguish
+      // "no threads" from "amp CLI missing / auth broken / parser broke",
+      // and silently empty UIs are confusing. Surface the real error.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new RequestError(-32603, `listSessions failed: ${msg}`);
     }
   }
 
