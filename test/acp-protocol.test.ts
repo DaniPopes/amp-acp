@@ -52,10 +52,12 @@ describe('ACP Protocol End-to-End', () => {
     expect(response.agentCapabilities?.sessionCapabilities?.list).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.resume).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.fork).toBeDefined();
-    expect(response.authMethods).toHaveLength(1);
-    expect(response.authMethods![0].id).toBe('setup');
-    expect(response.authMethods![0].name).toBe('Amp API Key Setup');
-    expect(response.authMethods![0]._meta?.['terminal-auth']?.label).toBe('Amp API Key Setup');
+    expect(response.authMethods).toHaveLength(2);
+    expect(response.authMethods![0].id).toBe('amp-login');
+    expect(response.authMethods![0]._meta?.['terminal-auth']?.command).toBe('amp');
+    expect(response.authMethods![1].id).toBe('setup');
+    expect(response.authMethods![1].name).toBe('Amp API Key Setup');
+    expect(response.authMethods![1]._meta?.['terminal-auth']?.label).toBe('Amp API Key Setup');
   });
 
   it('should handle newSession and return a valid sessionId', async () => {

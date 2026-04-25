@@ -151,6 +151,18 @@ export class AmpAcpAgent implements Agent {
       },
       authMethods: [
         {
+          id: 'amp-login',
+          name: 'Amp Login (browser)',
+          description: 'Sign in to Amp via your browser (recommended)',
+          _meta: {
+            'terminal-auth': {
+              command: 'amp',
+              args: ['login'],
+              label: 'Amp Login',
+            },
+          },
+        },
+        {
           id: 'setup',
           name: 'Amp API Key Setup',
           description: 'Run interactive setup to configure your Amp API key',
@@ -340,7 +352,17 @@ export class AmpAcpAgent implements Agent {
     };
   }
 
-  async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
+  async authenticate(params: AuthenticateRequest): Promise<AuthenticateResponse> {
+    // The amp-login terminal-auth method runs `amp login`, which stores
+    // credentials in ~/.config/amp (not in any env var our agent process
+    // sees), so we can't verify it from here. Trust the flow: if amp itself
+    // is authed, subprocess invocations will succeed; if not, the next
+    // prompt will surface the auth failure. The setup flow does set our
+    // local API key file (loaded into AMP_API_KEY at startup), which we can
+    // verify directly.
+    if (params.methodId === 'amp-login') {
+      return {};
+    }
     if (process.env.AMP_API_KEY) {
       return {};
     }
