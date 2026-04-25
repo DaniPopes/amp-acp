@@ -49,6 +49,7 @@ describe('ACP Protocol End-to-End', () => {
     expect(response.agentCapabilities?.mcpCapabilities?.http).toBe(true);
     expect(response.agentCapabilities?.mcpCapabilities?.sse).toBe(true);
     expect(response.agentCapabilities?.loadSession).toBe(true);
+    expect(response.agentCapabilities?.sessionCapabilities?.list).toBeDefined();
     expect(response.authMethods).toHaveLength(1);
     expect(response.authMethods![0].id).toBe('setup');
     expect(response.authMethods![0].name).toBe('Amp API Key Setup');

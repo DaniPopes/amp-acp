@@ -19,6 +19,8 @@ import {
   type LoadSessionResponse,
   type CloseSessionRequest,
   type CloseSessionResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type ReadTextFileRequest,
   type ReadTextFileResponse,
   type WriteTextFileRequest,
@@ -30,6 +32,7 @@ import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
+import { listAmpThreads, relativeToIso } from './list-threads.js';
 import path from 'node:path';
 import packageJson from '../package.json';
 
@@ -134,6 +137,7 @@ export class AmpAcpAgent implements Agent {
         loadSession: true,
         sessionCapabilities: {
           close: {},
+          list: {},
         },
         promptCapabilities: { image: true, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
@@ -434,6 +438,29 @@ export class AmpAcpAgent implements Agent {
     }
     s.mode = params.modeId;
     return {};
+  }
+
+  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    // The Amp CLI doesn't expose pagination; ignore params.cursor.
+    // params.cwd / additionalDirectories are also ignored because Amp doesn't
+    // record per-thread cwd. We return all threads and let the client filter
+    // (or just show them all).
+    void params;
+    const cwd = process.cwd();
+    try {
+      const entries = await listAmpThreads();
+      return {
+        sessions: entries.map((e) => ({
+          sessionId: e.threadId,
+          cwd,
+          title: e.title || null,
+          updatedAt: relativeToIso(e.lastUpdated) ?? null,
+        })),
+      };
+    } catch (err) {
+      console.error('[acp] listSessions failed:', err);
+      return { sessions: [] };
+    }
   }
 
   async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
