@@ -4,6 +4,7 @@ console.info = console.error;
 console.warn = console.error;
 console.debug = console.error;
 
+import './patch-amp-sdk.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
