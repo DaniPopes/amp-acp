@@ -41,7 +41,7 @@ import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
 import { forkAmpThread } from './fork-thread.js';
-import { listAmpThreads, relativeToIso } from './list-threads.js';
+import { listAmpThreads } from './list-threads.js';
 import { loadStoredApiKey } from './credentials.js';
 import path from 'node:path';
 import packageJson from '../package.json';
@@ -734,8 +734,8 @@ export class AmpAcpAgent implements Agent {
         sessions: entries.map((e) => ({
           sessionId: e.threadId,
           cwd,
-          title: e.title || null,
-          updatedAt: relativeToIso(e.lastUpdated) ?? null,
+          title: e.title,
+          updatedAt: e.updatedAt,
         })),
       };
     } catch (err) {
