@@ -29,7 +29,7 @@ const NEEDLE_RE = /const tempDir = (path\d*)\.join\(cwd, "\.tmp", sessionId\);/;
 const match = src.match(NEEDLE_RE);
 if (!match) {
   console.error(
-    '[patch-bundled-sdk] needle not found in dist/index.js — amp-sdk internals may have changed',
+    '[patch-bundled-sdk] tempDir needle not found in dist/index.js — amp-sdk internals may have changed',
   );
   process.exit(1);
 }
@@ -50,6 +50,31 @@ for (const stmt of osAliasMatch) {
     if (m) osId = m[1];
   }
 }
+
+// Also kill the buildSettingsFile early-return guard. Without this, the
+// SDK still writes an empty settings.json and passes it to amp via
+// `--settings-file`, which **overrides** the user's global
+// ~/.config/amp/settings.json (so e.g. skip-all-permissions stops working).
+// Force the early return by inverting the guard so we always return null
+// and never write a file.
+const GUARD_RE = /if \(!settingsFields\.some\(Boolean\)\) \{/;
+let patched = src;
+if (GUARD_RE.test(patched)) {
+  patched = patched.replace(GUARD_RE, 'if (true) {');
+} else {
+  console.error(
+    '[patch-bundled-sdk] settings-file guard not found in dist/index.js — amp-sdk internals may have changed',
+  );
+  process.exit(1);
+}
+
+// Even though the early-return now fires unconditionally and the tempDir
+// line is unreachable, still rewrite it so future SDK changes don't
+// silently regress on workspace pollution.
 const REPLACEMENT = `const tempDir = ${pathId}.join(${osId}.tmpdir(), "amp-acp-sdk-tmp", sessionId); /* amp-acp:tmpdir-redirect */`;
-fs.writeFileSync(distPath, src.replace(NEEDLE_RE, REPLACEMENT), 'utf8');
-console.log(`[patch-bundled-sdk] redirected amp-sdk .tmp/ to ${osId}.tmpdir() (path=${pathId})`);
+patched = patched.replace(NEEDLE_RE, REPLACEMENT);
+
+fs.writeFileSync(distPath, patched, 'utf8');
+console.log(
+  `[patch-bundled-sdk] disabled SDK settings-file generation; redirected tempDir to ${osId}.tmpdir() (path=${pathId})`,
+);
