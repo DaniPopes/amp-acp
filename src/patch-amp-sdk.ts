@@ -26,6 +26,17 @@ import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2).map((a) => (a === '--stream-json' ? '--stream-json-thinking' : a));
 const child = spawn('amp', args, { stdio: 'inherit' });
+
+// Forward termination signals to the amp child so cancel() actually kills it.
+// Without this, the SDK aborts our wrapper process via the AbortSignal but
+// the amp subprocess keeps running orphaned (and keeps emitting tool calls).
+const FORWARD_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'];
+for (const sig of FORWARD_SIGNALS) {
+  process.on(sig, () => {
+    if (!child.killed) child.kill(sig);
+  });
+}
+
 child.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 0);
