@@ -378,6 +378,16 @@ function firstString(input: Record<string, unknown>, keys: string[]): string | u
   return undefined;
 }
 
+export function toAbsolutePath(filePath: string, cwd?: string): string {
+  if (path.isAbsolute(filePath)) return filePath;
+  if (!cwd) return filePath;
+  try {
+    return path.resolve(cwd, filePath);
+  } catch {
+    return filePath;
+  }
+}
+
 export function toDisplayPath(filePath: string, cwd?: string): string {
   if (!filePath || !cwd) return filePath;
   try {
@@ -554,7 +564,7 @@ function contentForToolUse(
       const oldStr = str(input.old_str);
       const newStr = str(input.new_str);
       if (p && oldStr !== undefined && newStr !== undefined) {
-        return [{ type: 'diff', path: toDisplayPath(p, cwd), oldText: oldStr, newText: newStr }];
+        return [{ type: 'diff', path: toAbsolutePath(p, cwd), oldText: oldStr, newText: newStr }];
       }
       return [];
     }
@@ -562,7 +572,7 @@ function contentForToolUse(
       const p = str(input.path);
       const newText = str(input.content);
       if (p && newText !== undefined) {
-        return [{ type: 'diff', path: toDisplayPath(p, cwd), oldText: null, newText }];
+        return [{ type: 'diff', path: toAbsolutePath(p, cwd), oldText: null, newText }];
       }
       return [];
     }

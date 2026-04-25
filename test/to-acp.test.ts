@@ -148,7 +148,7 @@ describe('toAcpNotifications: edit_file diff', () => {
       sessionUpdate: 'tool_call',
       kind: 'edit',
       title: 'Edit src/a.ts',
-      content: [{ type: 'diff', path: 'src/a.ts', oldText: 'a', newText: 'b' }],
+      content: [{ type: 'diff', path: '/repo/src/a.ts', oldText: 'a', newText: 'b' }],
       locations: [{ path: '/repo/src/a.ts' }],
     });
   });
