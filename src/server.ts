@@ -36,7 +36,7 @@ import {
   type SetSessionConfigOptionResponse,
   type AuthMethod,
 } from '@agentclientprotocol/sdk';
-import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
+import { execute, threads } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
 import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
