@@ -20,7 +20,8 @@
     "build": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs",
     "build:binary": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && node scripts/patch-bundled-sdk.mjs && bun build dist/index.js --compile --outfile dist/amp-acp",
     "start": "bun dist/index.js",
-    "lint": "tsc --noEmit",
+    "lint": "biome check && tsc --noEmit",
+    "format": "biome check --write",
     "test": "bun test test/*.test.ts",
     "test:binary": "bun build src/index.ts --target=node --outdir=dist --entry-naming=[dir]/[name].js && bun build dist/index.js --compile --outfile dist/amp-acp-test && bun test test/binary/binary.test.ts",
     "test:all": "bun run test && bun run test:binary"
@@ -31,6 +32,7 @@
     "@sourcegraph/amp-sdk": "0.1.0-20260425005347-g58772b5"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.13",
     "@types/bun": "^1.2.5",
     "typescript": "^5.9.3"
   }
