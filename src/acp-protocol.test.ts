@@ -48,6 +48,7 @@ describe('ACP Protocol End-to-End', () => {
     expect(response.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
     expect(response.agentCapabilities?.mcpCapabilities?.http).toBe(true);
     expect(response.agentCapabilities?.mcpCapabilities?.sse).toBe(true);
+    expect(response.agentCapabilities?.loadSession).toBe(true);
     expect(response.authMethods).toHaveLength(1);
     expect(response.authMethods![0].id).toBe('setup');
     expect(response.authMethods![0].name).toBe('Amp API Key Setup');
@@ -61,10 +62,10 @@ describe('ACP Protocol End-to-End', () => {
     });
 
     expect(response.sessionId).toBeDefined();
-    expect(response.sessionId).toMatch(/^S-/);
+    expect(response.sessionId).toMatch(/^[ST]-/);
     expect(response.modes?.currentModeId).toBe('default');
-    expect(response.modes?.availableModes).toHaveLength(2);
-    expect(response.modes?.availableModes?.map((m) => m.id)).toEqual(['default', 'bypass']);
+    expect(response.modes?.availableModes).toHaveLength(3);
+    expect(response.modes?.availableModes?.map((m) => m.id)).toEqual(['default', 'plan', 'bypass']);
   });
 
   it('should handle newSession with MCP servers', async () => {
@@ -87,7 +88,7 @@ describe('ACP Protocol End-to-End', () => {
     });
 
     expect(response.sessionId).toBeDefined();
-    expect(response.sessionId).toMatch(/^S-/);
+    expect(response.sessionId).toMatch(/^[ST]-/);
   });
 
   it('should handle setSessionMode', async () => {
@@ -141,8 +142,22 @@ describe('ACP Protocol End-to-End', () => {
     const s2 = await agentConnection.newSession({ cwd: '/tmp/b', mcpServers: [] });
 
     expect(s1.sessionId).not.toBe(s2.sessionId);
-    expect(s1.sessionId).toMatch(/^S-/);
-    expect(s2.sessionId).toMatch(/^S-/);
+    expect(s1.sessionId).toMatch(/^[ST]-/);
+    expect(s2.sessionId).toMatch(/^[ST]-/);
+  });
+
+  it('should reject loadSession with invalid thread ID', async () => {
+    try {
+      await agentConnection.loadSession({
+        sessionId: 'S-not-a-thread',
+        cwd: '/tmp',
+        mcpServers: [],
+      });
+      expect(true).toBe(false);
+    } catch (e: unknown) {
+      expect(e).toBeDefined();
+      expect(String((e as { message?: string }).message ?? e)).toMatch(/Invalid thread ID/);
+    }
   });
 
   it('should send available_commands_update notification after newSession', async () => {
@@ -214,9 +229,10 @@ describe('toAcpNotifications', () => {
     expect(result[0].update).toMatchObject({
       sessionUpdate: 'tool_call',
       toolCallId: 'tool-1',
-      title: 'Read',
+      title: 'Read /tmp/file.txt',
       status: 'pending',
-      kind: 'other',
+      kind: 'read',
+      locations: [{ path: '/tmp/file.txt' }],
     });
   });
 
@@ -294,7 +310,7 @@ describe('toAcpNotifications', () => {
     expect(result).toHaveLength(3);
     expect(result[0].update).toMatchObject({ sessionUpdate: 'agent_thought_chunk' });
     expect(result[1].update).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
-    expect(result[2].update).toMatchObject({ sessionUpdate: 'tool_call', title: 'Bash' });
+    expect(result[2].update).toMatchObject({ sessionUpdate: 'tool_call', title: 'ls', kind: 'execute' });
   });
 
   it('should return empty for missing message', () => {

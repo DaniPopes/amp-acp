@@ -15,15 +15,17 @@ import {
   type SetSessionModeResponse,
   type SetSessionModelRequest,
   type SetSessionModelResponse,
+  type LoadSessionRequest,
+  type LoadSessionResponse,
   type ReadTextFileRequest,
   type ReadTextFileResponse,
   type WriteTextFileRequest,
   type WriteTextFileResponse,
   type ClientCapabilities,
 } from '@agentclientprotocol/sdk';
-import { execute, type StreamMessage } from '@sourcegraph/amp-sdk';
+import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
-import { toAcpNotifications } from './to-acp.js';
+import { toAcpNotifications, createAcpConversionState, type AcpConversionState } from './to-acp.js';
 import path from 'node:path';
 import packageJson from '../package.json';
 
@@ -35,9 +37,66 @@ interface SessionState {
   cancelled: boolean;
   active: boolean;
   mode: string;
+  model: string;
   mcpConfig: AmpMcpConfig;
   cwd: string;
 }
+
+const AVAILABLE_MODES = [
+  { id: 'default', name: 'Default', description: 'Prompts for permission on first use of each tool' },
+  { id: 'plan', name: 'Plan', description: 'Read-only analysis mode; do not modify files' },
+  { id: 'bypass', name: 'Bypass', description: 'Skips all permission prompts' },
+];
+
+const AVAILABLE_MODELS = [
+  { modelId: 'smart', name: 'Smart', description: 'Default balanced model' },
+  { modelId: 'rush', name: 'Rush', description: 'Fastest, lowest quality' },
+  { modelId: 'large', name: 'Large', description: 'Larger context, slower' },
+  { modelId: 'deep', name: 'Deep', description: 'Highest reasoning, slowest' },
+];
+
+const PLAN_MODE_PREFIX =
+  '[PLAN MODE ACTIVE: You are in read-only analysis mode. ' +
+  'Analyze, research, and plan but do NOT write code or modify files. ' +
+  'If the user asks you to implement something, explain your plan instead.]\n\n';
+
+const COMMAND_TO_MODE: Record<string, string> = {
+  plan: 'plan',
+  code: 'default',
+  yolo: 'bypass',
+};
+
+const COMMAND_TO_PROMPT_PREFIX: Record<string, string> = {
+  oracle:
+    'Use the Oracle tool to help with this task. Consult the Oracle for expert analysis, planning, or debugging:\n\n',
+  librarian:
+    'Use the Librarian tool to explore and understand code. Ask the Librarian to analyze repositories on GitHub:\n\n',
+  task: 'Use the Task tool to spawn a subagent for this multi-step implementation. Provide detailed instructions:\n\n',
+  parallel:
+    'Spawn multiple Task subagents to work on these independent tasks in parallel. Each task should be self-contained:\n\n',
+  web: 'Use web_search and read_web_page tools to find information about:\n\n',
+};
+
+const INIT_PROMPT = `Please analyze this codebase and create an AGENTS.md file containing:
+1. Build/lint/test commands - especially for running a single test
+2. Architecture and codebase structure information, including important subprojects, internal APIs, databases, etc.
+3. Code style guidelines, including imports, conventions, formatting, types, naming conventions, error handling, etc.
+
+The file you create will be given to agentic coding tools (such as yourself) that operate in this repository. Make it about 20 lines long.
+
+If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLAUDE.md), Windsurf rules (.windsurfrules), Cline rules (.clinerules), Goose rules (.goosehints), or Copilot rules (in .github/copilot-instructions.md), make sure to include them. Also, first check if there is an existing AGENTS.md or AGENT.md file, and if so, update it instead of overwriting it.`;
+
+const AVAILABLE_COMMANDS = [
+  { name: 'init', description: 'Generate an AGENTS.md file for the project' },
+  { name: 'plan', description: 'Switch to read-only analysis mode' },
+  { name: 'code', description: 'Switch to default mode' },
+  { name: 'yolo', description: 'Bypass all permission prompts' },
+  { name: 'oracle', description: 'Consult the Oracle for planning, review, or debugging' },
+  { name: 'librarian', description: 'Ask the Librarian to explore codebases on GitHub' },
+  { name: 'task', description: 'Spawn a Task subagent for multi-step implementation' },
+  { name: 'parallel', description: 'Run multiple subagents in parallel' },
+  { name: 'web', description: 'Search the web for documentation or information' },
+];
 
 interface InitializeResponseWithAgentInfo extends InitializeResponse {
   agentInfo: {
@@ -59,6 +118,7 @@ export class AmpAcpAgent implements Agent {
   async initialize(request: InitializeRequest): Promise<InitializeResponseWithAgentInfo> {
     this.clientCapabilities = request.clientCapabilities;
     console.info(`[acp] amp-acp v${PACKAGE_VERSION} initialized`);
+    console.info(`[acp] clientCapabilities: ${JSON.stringify(request.clientCapabilities)}`);
     return {
       protocolVersion: 1,
       agentInfo: {
@@ -67,6 +127,7 @@ export class AmpAcpAgent implements Agent {
         version: PACKAGE_VERSION,
       },
       agentCapabilities: {
+        loadSession: true,
         promptCapabilities: { image: true, embeddedContext: true },
         mcpCapabilities: { http: true, sse: true },
       },
@@ -88,51 +149,97 @@ export class AmpAcpAgent implements Agent {
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const sessionId = `S-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
 
+    // Allocate a real Amp thread up-front so the ACP sessionId equals the Amp
+    // thread id. This makes the session resumable via loadSession (which calls
+    // `amp threads markdown <id>`); a synthetic S- id would be rejected.
+    let sessionId: string;
+    try {
+      sessionId = await threads.new();
+    } catch (e) {
+      console.error('[acp] threads.new() failed, falling back to synthetic sessionId', e);
+      sessionId = `S-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
     this.sessions.set(sessionId, {
-      threadId: null,
+      threadId: sessionId.startsWith('T-') ? sessionId : null,
       controller: null,
       cancelled: false,
       active: false,
       mode: 'default',
+      model: 'smart',
       mcpConfig,
       cwd: params.cwd || process.cwd(),
     });
 
     const result: NewSessionResponse = {
       sessionId,
-      modes: {
-        currentModeId: 'default',
-        availableModes: [
-          { id: 'default', name: 'Default', description: 'Prompts for permission on first use of each tool' },
-          { id: 'bypass', name: 'Bypass', description: 'Skips all permission prompts' },
-        ],
-      },
+      modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
+      models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
     };
 
-    setImmediate(async () => {
-      try {
-        await this.client.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: 'available_commands_update',
-            availableCommands: [
-              {
-                name: 'init',
-                description: 'Generate an AGENTS.md file for the project',
-              },
-            ],
-          },
-        });
-      } catch (e) {
-        console.error('[acp] failed to send available_commands_update', e);
-      }
-    });
+    setImmediate(() => this.sendAvailableCommandsUpdate(sessionId));
 
     return result;
+  }
+
+  private async sendAvailableCommandsUpdate(sessionId: string): Promise<void> {
+    try {
+      await this.client.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: 'available_commands_update',
+          availableCommands: AVAILABLE_COMMANDS,
+        },
+      });
+    } catch (e) {
+      console.error('[acp] failed to send available_commands_update', e);
+    }
+  }
+
+  async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+    // Reject anything that isn't an Amp thread id up-front so Zed surfaces the
+    // error at thread-open time instead of silently failing on the first
+    // prompt (when we'd pass it as `continue:` to Amp).
+    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+      throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
+    }
+
+    const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
+    const cwd = params.cwd || process.cwd();
+
+    // Fetch history first; if Amp rejects the id, surface the error rather than
+    // registering a broken session.
+    const md = await threads.markdown({ threadId: params.sessionId });
+
+    this.sessions.set(params.sessionId, {
+      threadId: params.sessionId,
+      controller: null,
+      cancelled: false,
+      active: false,
+      mode: 'default',
+      model: 'smart',
+      mcpConfig,
+      cwd,
+    });
+
+    if (md && md.trim()) {
+      await this.client.sessionUpdate({
+        sessionId: params.sessionId,
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: md },
+        },
+      });
+    }
+
+    setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
+
+    return {
+      modes: { currentModeId: 'default', availableModes: AVAILABLE_MODES },
+      models: { currentModelId: 'smart', availableModels: AVAILABLE_MODELS },
+    };
   }
 
   async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
@@ -152,18 +259,7 @@ export class AmpAcpAgent implements Agent {
     for (const chunk of params.prompt) {
       switch (chunk.type) {
         case 'text':
-          if (chunk.text.trim() === '/init') {
-            textInput += `Please analyze this codebase and create an AGENTS.md file containing:
-1. Build/lint/test commands - especially for running a single test
-2. Architecture and codebase structure information, including important subprojects, internal APIs, databases, etc.
-3. Code style guidelines, including imports, conventions, formatting, types, naming conventions, error handling, etc.
-
-The file you create will be given to agentic coding tools (such as yourself) that operate in this repository. Make it about 20 lines long.
-
-If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLAUDE.md), Windsurf rules (.windsurfrules), Cline rules (.clinerules), Goose rules (.goosehints), or Copilot rules (in .github/copilot-instructions.md), make sure to include them. Also, first check if there is an existing AGENTS.md or AGENT.md file, and if so, update it instead of overwriting it.`;
-          } else {
-            textInput += chunk.text;
-          }
+          textInput += chunk.text;
           break;
         case 'resource_link':
           textInput += `\n${chunk.uri}\n`;
@@ -180,9 +276,60 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLA
       }
     }
 
+    // Slash command handling: /init, mode commands (/plan, /code, /yolo),
+    // and agent shortcuts (/oracle, /librarian, /task, /parallel, /web).
+    const trimmed = textInput.trim();
+    const cmdMatch = trimmed.match(/^\/(\w+)(?:\s+(.*))?$/s);
+    if (cmdMatch) {
+      const [, cmdName, cmdArg] = cmdMatch;
+      const argText = cmdArg?.trim() ?? '';
+
+      if (cmdName === 'init') {
+        textInput = INIT_PROMPT;
+      } else if (COMMAND_TO_MODE[cmdName]) {
+        const newMode = COMMAND_TO_MODE[cmdName];
+        s.mode = newMode;
+        await this.client.sessionUpdate({
+          sessionId: params.sessionId,
+          update: { sessionUpdate: 'current_mode_update', currentModeId: newMode },
+        });
+        if (argText) {
+          textInput = argText + '\n';
+        } else {
+          await this.client.sessionUpdate({
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: `Switched to ${newMode} mode.` },
+            },
+          });
+          s.active = false;
+          return { stopReason: 'end_turn' };
+        }
+      } else if (COMMAND_TO_PROMPT_PREFIX[cmdName]) {
+        if (!argText) {
+          await this.client.sessionUpdate({
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: `Usage: /${cmdName} <your request>` },
+            },
+          });
+          s.active = false;
+          return { stopReason: 'end_turn' };
+        }
+        textInput = COMMAND_TO_PROMPT_PREFIX[cmdName] + argText + '\n';
+      }
+    }
+
+    if (s.mode === 'plan') {
+      textInput = PLAN_MODE_PREFIX + textInput;
+    }
+
     const options: Record<string, unknown> = {
       cwd: s.cwd,
       env: { TERM: 'dumb' },
+      mode: s.model,
     };
 
     if (s.mode === 'bypass') {
@@ -200,14 +347,18 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLA
     const controller = new AbortController();
     s.controller = controller;
 
+    const supportsTerminalOutput =
+      (this.clientCapabilities as { _meta?: { terminal_output?: boolean } } | undefined)?._meta?.terminal_output === true;
+    const acpState: AcpConversionState = createAcpConversionState(s.cwd, supportsTerminalOutput);
+
     try {
       for await (const message of execute({ prompt: textInput, options, signal: controller.signal })) {
         if (!s.threadId && message.session_id) {
           s.threadId = message.session_id;
         }
 
-        if (message.type === 'assistant') {
-          for (const n of toAcpNotifications(message, params.sessionId)) {
+        if (message.type === 'assistant' || message.type === 'user') {
+          for (const n of toAcpNotifications(message, params.sessionId, acpState)) {
             try {
               await this.client.sessionUpdate(n);
             } catch (e) {
@@ -255,11 +406,22 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLA
     }
   }
 
-  async setSessionModel(_params: SetSessionModelRequest): Promise<SetSessionModelResponse> { return {}; }
+  async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    const s = this.sessions.get(params.sessionId);
+    if (!s) throw new Error('Session not found');
+    if (!AVAILABLE_MODELS.some((m) => m.modelId === params.modelId)) {
+      throw new RequestError(-32602, `Unknown model: ${params.modelId}`);
+    }
+    s.model = params.modelId;
+    return {};
+  }
 
   async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
     const s = this.sessions.get(params.sessionId);
     if (!s) throw new Error('Session not found');
+    if (!AVAILABLE_MODES.some((m) => m.id === params.modeId)) {
+      throw new RequestError(-32602, `Unknown mode: ${params.modeId}`);
+    }
     s.mode = params.modeId;
     return {};
   }
