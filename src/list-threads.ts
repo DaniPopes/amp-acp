@@ -1,12 +1,15 @@
 // Shell out to `amp threads list --json` and parse the JSON output.
 // The Amp SDK doesn't expose a list method, so we shell out to the CLI.
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export interface AmpThreadListEntry {
   threadId: string;
   title: string | null;
   updatedAt: string;
   messageCount: number;
+  /** Absolute path to the thread's working directory, if recorded. */
+  cwd: string | null;
 }
 
 interface RawAmpThread {
@@ -14,6 +17,8 @@ interface RawAmpThread {
   title: string | null;
   updated: string;
   messageCount: number;
+  /** file:// URI of the thread's primary working tree. */
+  tree?: string | null;
 }
 
 export async function listAmpThreads(includeArchived = false): Promise<AmpThreadListEntry[]> {
@@ -44,5 +49,15 @@ export function parseAmpThreadList(output: string): AmpThreadListEntry[] {
     title: r.title,
     updatedAt: r.updated,
     messageCount: r.messageCount,
+    cwd: treeUriToPath(r.tree),
   }));
+}
+
+function treeUriToPath(uri: string | null | undefined): string | null {
+  if (!uri) return null;
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    return null;
+  }
 }
