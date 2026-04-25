@@ -14,7 +14,7 @@ interface JsonRpcMessage {
 }
 
 let proc: ChildProcess;
-let messageQueue: JsonRpcMessage[] = [];
+const messageQueue: JsonRpcMessage[] = [];
 let nextId = 1;
 let buffer = '';
 

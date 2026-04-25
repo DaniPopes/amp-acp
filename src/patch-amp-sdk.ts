@@ -45,7 +45,10 @@ child.on('exit', (code, signal) => {
 
 function installAmpCliWrapper(): void {
   if (process.env.AMP_CLI_PATH) return;
-  const wrapperPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'amp-acp-shim-')), 'amp-thinking.mjs');
+  const wrapperPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'amp-acp-shim-')),
+    'amp-thinking.mjs',
+  );
   fs.writeFileSync(wrapperPath, WRAPPER_SOURCE, { mode: 0o755 });
   process.env.AMP_CLI_PATH = wrapperPath;
 }

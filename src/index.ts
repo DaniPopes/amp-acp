@@ -13,7 +13,10 @@ import { runAcp } from './run-acp.js';
 
 function getConfigDir(): string {
   if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'amp-acp');
+    return path.join(
+      process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'),
+      'amp-acp',
+    );
   }
   return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'amp-acp');
 }

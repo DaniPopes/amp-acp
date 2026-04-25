@@ -5,7 +5,11 @@ import { getTerminalAuthCommand, isAuthError } from '../src/server.js';
 describe('isAuthError', () => {
   it('detects missing API key login flow errors', () => {
     expect(isAuthError('No API key found. Starting login flow...')).toBe(true);
-    expect(isAuthError('Failed to parse JSON response, raw line: No API key found. Starting login flow...')).toBe(true);
+    expect(
+      isAuthError(
+        'Failed to parse JSON response, raw line: No API key found. Starting login flow...',
+      ),
+    ).toBe(true);
   });
 
   it('does not misclassify unrelated parse errors', () => {
@@ -19,6 +23,8 @@ describe('getTerminalAuthCommand', () => {
   });
 
   it('resolves argv1 path for non-binary execution', () => {
-    expect(getTerminalAuthCommand('./dist/index.js', '/usr/bin/bun')).toBe(path.resolve('./dist/index.js'));
+    expect(getTerminalAuthCommand('./dist/index.js', '/usr/bin/bun')).toBe(
+      path.resolve('./dist/index.js'),
+    );
   });
 });

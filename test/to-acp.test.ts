@@ -35,8 +35,12 @@ describe('titleForTool', () => {
 
   it('builds Read titles with line ranges', () => {
     expect(titleForTool('Read', { path: '/abs/foo.ts' })).toBe('Read /abs/foo.ts');
-    expect(titleForTool('Read', { path: '/abs/foo.ts', read_range: [10, 50] })).toBe('Read /abs/foo.ts (10 - 50)');
-    expect(titleForTool('Read', { path: '/abs/foo.ts', read_range: [10] })).toBe('Read /abs/foo.ts (from line 10)');
+    expect(titleForTool('Read', { path: '/abs/foo.ts', read_range: [10, 50] })).toBe(
+      'Read /abs/foo.ts (10 - 50)',
+    );
+    expect(titleForTool('Read', { path: '/abs/foo.ts', read_range: [10] })).toBe(
+      'Read /abs/foo.ts (from line 10)',
+    );
   });
 
   it('makes paths project-relative when cwd is given', () => {
@@ -48,11 +52,15 @@ describe('titleForTool', () => {
     expect(titleForTool('Grep', { pattern: 'foo', include: '*.ts', path: 'src' })).toBe(
       'Grep "foo" --include="*.ts" src',
     );
-    expect(titleForTool('glob', { filePattern: '**/*.rs', path: 'src' })).toBe('Find `src` `**/*.rs`');
+    expect(titleForTool('glob', { filePattern: '**/*.rs', path: 'src' })).toBe(
+      'Find `src` `**/*.rs`',
+    );
   });
 
   it('builds web/oracle/task titles', () => {
-    expect(titleForTool('web_search', { search_queries: ['rust async', 'tokio'] })).toBe('"rust async" (+1)');
+    expect(titleForTool('web_search', { search_queries: ['rust async', 'tokio'] })).toBe(
+      '"rust async" (+1)',
+    );
     expect(titleForTool('read_web_page', { url: 'https://x.dev' })).toBe('Fetch https://x.dev');
     expect(titleForTool('oracle', { task: 'review this' })).toBe('Oracle: review this');
     expect(titleForTool('Task', { description: 'sub' })).toBe('Task: sub');
@@ -152,7 +160,12 @@ describe('toAcpNotifications: edit_file diff', () => {
         type: 'assistant',
         message: {
           content: [
-            { type: 'tool_use', id: 'e1', name: 'edit_file', input: { path: '/repo/x', old_str: 'a', new_str: 'b' } },
+            {
+              type: 'tool_use',
+              id: 'e1',
+              name: 'edit_file',
+              input: { path: '/repo/x', old_str: 'a', new_str: 'b' },
+            },
           ],
         },
       },
@@ -162,7 +175,11 @@ describe('toAcpNotifications: edit_file diff', () => {
     const result = toAcpNotifications(
       {
         type: 'user',
-        message: { content: [{ type: 'tool_result', tool_use_id: 'e1', content: 'File updated', is_error: false }] },
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'e1', content: 'File updated', is_error: false },
+          ],
+        },
       },
       'S',
       state,
@@ -181,7 +198,14 @@ describe('toAcpNotifications: create_file diff', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_use', id: 'c1', name: 'create_file', input: { path: 'new.ts', content: 'hello' } }],
+          content: [
+            {
+              type: 'tool_use',
+              id: 'c1',
+              name: 'create_file',
+              input: { path: 'new.ts', content: 'hello' },
+            },
+          ],
         },
       },
       'S',
@@ -233,7 +257,14 @@ describe('toAcpNotifications: todo_write -> plan', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_use', id: 't1', name: 'todo_write', input: { todos: [{ content: 'a' }] } }],
+          content: [
+            {
+              type: 'tool_use',
+              id: 't1',
+              name: 'todo_write',
+              input: { todos: [{ content: 'a' }] },
+            },
+          ],
         },
       },
       'S',
@@ -242,7 +273,9 @@ describe('toAcpNotifications: todo_write -> plan', () => {
     const result = toAcpNotifications(
       {
         type: 'user',
-        message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok', is_error: false }] },
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok', is_error: false }],
+        },
       },
       'S',
       state,
@@ -272,7 +305,10 @@ describe('toAcpNotifications: Bash terminal widget', () => {
   it('emits terminal_output then terminal_exit on tool_result', () => {
     const state = createAcpConversionState('/repo', true);
     toAcpNotifications(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: { cmd: 'ls' } }] } },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: { cmd: 'ls' } }] },
+      },
       'S',
       state,
     );
@@ -299,13 +335,20 @@ describe('toAcpNotifications: Bash terminal widget', () => {
     expect(out._meta).toEqual({ terminal_output: { terminal_id: 'b1', data: 'a\nb\n' } });
     expect(exit.status).toBe('completed');
     expect(exit.content).toEqual([{ type: 'terminal', terminalId: 'b1' }]);
-    expect(exit._meta).toEqual({ terminal_exit: { terminal_id: 'b1', exit_code: 0, signal: null } });
+    expect(exit._meta).toEqual({
+      terminal_exit: { terminal_id: 'b1', exit_code: 0, signal: null },
+    });
   });
 
   it('marks tool_call as failed when exitCode is non-zero (terminal path)', () => {
     const state = createAcpConversionState('/repo', true);
     toAcpNotifications(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b3', name: 'Bash', input: { cmd: 'false' } }] } },
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'b3', name: 'Bash', input: { cmd: 'false' } }],
+        },
+      },
       'S',
       state,
     );
@@ -334,7 +377,12 @@ describe('toAcpNotifications: Bash terminal widget', () => {
   it('marks tool_call as failed when exitCode is non-zero (fallback path)', () => {
     const state = createAcpConversionState('/repo', false);
     toAcpNotifications(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b4', name: 'Bash', input: { cmd: 'false' } }] } },
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'b4', name: 'Bash', input: { cmd: 'false' } }],
+        },
+      },
       'S',
       state,
     );
@@ -362,7 +410,10 @@ describe('toAcpNotifications: Bash terminal widget', () => {
   it('falls back to console fence when capability is absent', () => {
     const state = createAcpConversionState('/repo', false);
     toAcpNotifications(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b2', name: 'Bash', input: { cmd: 'ls' } }] } },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'b2', name: 'Bash', input: { cmd: 'ls' } }] },
+      },
       'S',
       state,
     );
@@ -423,14 +474,26 @@ describe('toAcpNotifications: Read result uses adaptive fence', () => {
   it('wraps Read result via markdownEscape', () => {
     const state = createAcpConversionState();
     toAcpNotifications(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'r1', name: 'Read', input: { path: '/x' } }] } },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'r1', name: 'Read', input: { path: '/x' } }] },
+      },
       'S',
       state,
     );
     const result = toAcpNotifications(
       {
         type: 'user',
-        message: { content: [{ type: 'tool_result', tool_use_id: 'r1', content: 'has ```inner``` fence', is_error: false }] },
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'r1',
+              content: 'has ```inner``` fence',
+              is_error: false,
+            },
+          ],
+        },
       },
       'S',
       state,

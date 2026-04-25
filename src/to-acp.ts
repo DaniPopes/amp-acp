@@ -1,5 +1,12 @@
 import path from 'node:path';
-import type { SessionNotification, ContentBlock, ToolCallContent, ToolKind, ToolCallLocation, PlanEntry } from '@agentclientprotocol/sdk';
+import type {
+  SessionNotification,
+  ContentBlock,
+  ToolCallContent,
+  ToolKind,
+  ToolCallLocation,
+  PlanEntry,
+} from '@agentclientprotocol/sdk';
 
 interface AmpContentText {
   type: 'text';
@@ -35,7 +42,12 @@ interface AmpContentToolResult {
   is_error: boolean;
 }
 
-type AmpContentBlock = AmpContentText | AmpContentImage | AmpContentThinking | AmpContentToolUse | AmpContentToolResult;
+type AmpContentBlock =
+  | AmpContentText
+  | AmpContentImage
+  | AmpContentThinking
+  | AmpContentToolUse
+  | AmpContentToolResult;
 
 interface AmpMessage {
   type: string;
@@ -53,7 +65,10 @@ export interface AcpConversionState {
   toolNamesById: Map<string, string>;
 }
 
-export function createAcpConversionState(cwd?: string, supportsTerminalOutput = false): AcpConversionState {
+export function createAcpConversionState(
+  cwd?: string,
+  supportsTerminalOutput = false,
+): AcpConversionState {
   return { cwd, supportsTerminalOutput, toolNamesById: new Map() };
 }
 
@@ -224,18 +239,33 @@ function contentForToolResult(
 ): ToolCallContent[] | undefined {
   // For edit_file/create_file/undo_edit, the diff is already attached to the tool_call.
   // Returning `undefined` leaves it untouched (returning `[]` would clobber it).
-  if (!isError && (toolName === 'edit_file' || toolName === 'create_file' || toolName === 'undo_edit' || toolName === 'format_file')) {
+  if (
+    !isError &&
+    (toolName === 'edit_file' ||
+      toolName === 'create_file' ||
+      toolName === 'undo_edit' ||
+      toolName === 'format_file')
+  ) {
     return undefined;
   }
   // Read benefits from adaptive fences so file content (which itself may contain ```) renders cleanly.
   if (!isError && toolName === 'Read') {
     const text = stringifyContent(content);
-    return text ? [{ type: 'content', content: { type: 'text', text: markdownEscape(text) } }] : undefined;
+    return text
+      ? [{ type: 'content', content: { type: 'text', text: markdownEscape(text) } }]
+      : undefined;
   }
   // Bash output reads better in a console fence.
   if (!isError && toolName === 'Bash') {
     const { data } = parseBashResult(content, false);
-    return data ? [{ type: 'content', content: { type: 'text', text: '```console\n' + data.trimEnd() + '\n```' } }] : undefined;
+    return data
+      ? [
+          {
+            type: 'content',
+            content: { type: 'text', text: '```console\n' + data.trimEnd() + '\n```' },
+          },
+        ]
+      : undefined;
   }
   return toAcpContentArray(content, isError);
 }
@@ -258,13 +288,18 @@ export function parseBashResult(
       const parsed = JSON.parse(trimmed) as Record<string, unknown>;
       const out =
         (typeof parsed.output === 'string' && parsed.output) ||
-        [parsed.stdout, parsed.stderr].filter((v): v is string => typeof v === 'string' && v.length > 0).join('\n') ||
+        [parsed.stdout, parsed.stderr]
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)
+          .join('\n') ||
         '';
       const code =
-        typeof parsed.exitCode === 'number' ? parsed.exitCode :
-        typeof parsed.exit_code === 'number' ? parsed.exit_code :
-        typeof parsed.return_code === 'number' ? parsed.return_code :
-        fallbackExit;
+        typeof parsed.exitCode === 'number'
+          ? parsed.exitCode
+          : typeof parsed.exit_code === 'number'
+            ? parsed.exit_code
+            : typeof parsed.return_code === 'number'
+              ? parsed.return_code
+              : fallbackExit;
       return { data: out, exitCode: code };
     } catch {
       // not JSON; fall through.
@@ -287,7 +322,12 @@ function toAcpContentArray(content: string | AmpContentText[], isError = false):
     }));
   }
   if (typeof content === 'string' && content.length > 0) {
-    return [{ type: 'content' as const, content: { type: 'text' as const, text: isError ? wrapCode(content) : content } }];
+    return [
+      {
+        type: 'content' as const,
+        content: { type: 'text' as const, text: isError ? wrapCode(content) : content },
+      },
+    ];
   }
   return [];
 }
@@ -306,7 +346,10 @@ export function markdownEscape(text: string): string {
 }
 
 export function sanitizeTitle(text: string): string {
-  const sanitized = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const sanitized = text
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (sanitized.length <= MAX_TITLE_LENGTH) return sanitized;
   return sanitized.slice(0, MAX_TITLE_LENGTH - 1) + '…';
 }
@@ -500,7 +543,11 @@ export function titleForTool(name: string, input: Record<string, unknown>, cwd?:
   }
 }
 
-function contentForToolUse(name: string, input: Record<string, unknown>, cwd?: string): ToolCallContent[] {
+function contentForToolUse(
+  name: string,
+  input: Record<string, unknown>,
+  cwd?: string,
+): ToolCallContent[] {
   switch (name) {
     case 'edit_file': {
       const p = str(input.path);
@@ -521,7 +568,10 @@ function contentForToolUse(name: string, input: Record<string, unknown>, cwd?: s
     }
     case 'mermaid': {
       const diagram = str(input.diagram);
-      if (diagram) return [{ type: 'content', content: { type: 'text', text: '```mermaid\n' + diagram + '\n```' } }];
+      if (diagram)
+        return [
+          { type: 'content', content: { type: 'text', text: '```mermaid\n' + diagram + '\n```' } },
+        ];
       return [];
     }
     default:
@@ -529,7 +579,10 @@ function contentForToolUse(name: string, input: Record<string, unknown>, cwd?: s
   }
 }
 
-function locationsForTool(name: string, input: Record<string, unknown>): ToolCallLocation[] | undefined {
+function locationsForTool(
+  name: string,
+  input: Record<string, unknown>,
+): ToolCallLocation[] | undefined {
   switch (name) {
     case 'Read': {
       const p = firstString(input, ['path', 'file_path']);

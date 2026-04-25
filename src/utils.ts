@@ -6,7 +6,8 @@ export function nodeToWebWritable(nodeStream: Writable): WritableStream<Uint8Arr
     write(chunk: Uint8Array): Promise<void> {
       return new Promise((resolve, reject) => {
         nodeStream.write(Buffer.from(chunk), (err) => {
-          if (err) reject(err); else resolve();
+          if (err) reject(err);
+          else resolve();
         });
       });
     },

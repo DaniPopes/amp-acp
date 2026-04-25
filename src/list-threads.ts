@@ -84,11 +84,17 @@ export function relativeToIso(rel: string, now: Date = new Date()): string | und
   const n = Number.parseInt(m[1], 10);
   const unit = m[2].toLowerCase();
   const factor =
-    unit === 's' ? 1000 :
-    unit === 'm' ? 60_000 :
-    unit === 'h' ? 3_600_000 :
-    unit === 'd' ? 86_400_000 :
-    unit === 'w' ? 604_800_000 : 0;
+    unit === 's'
+      ? 1000
+      : unit === 'm'
+        ? 60_000
+        : unit === 'h'
+          ? 3_600_000
+          : unit === 'd'
+            ? 86_400_000
+            : unit === 'w'
+              ? 604_800_000
+              : 0;
   if (!factor) return undefined;
   return new Date(now.getTime() - n * factor).toISOString();
 }

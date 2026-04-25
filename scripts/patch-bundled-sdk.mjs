@@ -15,7 +15,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const distPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
+const distPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'dist',
+  'index.js',
+);
 
 const src = fs.readFileSync(distPath, 'utf8');
 if (src.includes('amp-acp:tmpdir-redirect')) {

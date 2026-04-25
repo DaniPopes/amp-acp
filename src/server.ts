@@ -55,8 +55,16 @@ interface SessionState {
 }
 
 const AVAILABLE_MODES = [
-  { id: 'default', name: 'Default', description: 'Prompts for permission on first use of each tool' },
-  { id: 'plan', name: 'Plan', description: 'Read-only analysis mode; do not modify files' },
+  {
+    id: 'default',
+    name: 'Default',
+    description: 'Prompts for permission on first use of each tool',
+  },
+  {
+    id: 'plan',
+    name: 'Plan',
+    description: 'Read-only analysis mode; do not modify files',
+  },
   { id: 'bypass', name: 'Bypass', description: 'Skips all permission prompts' },
 ];
 
@@ -103,11 +111,23 @@ const AVAILABLE_COMMANDS = [
   { name: 'plan', description: 'Switch to read-only analysis mode' },
   { name: 'code', description: 'Switch to default mode' },
   { name: 'yolo', description: 'Bypass all permission prompts' },
-  { name: 'oracle', description: 'Consult the Oracle for planning, review, or debugging' },
-  { name: 'librarian', description: 'Ask the Librarian to explore codebases on GitHub' },
-  { name: 'task', description: 'Spawn a Task subagent for multi-step implementation' },
+  {
+    name: 'oracle',
+    description: 'Consult the Oracle for planning, review, or debugging',
+  },
+  {
+    name: 'librarian',
+    description: 'Ask the Librarian to explore codebases on GitHub',
+  },
+  {
+    name: 'task',
+    description: 'Spawn a Task subagent for multi-step implementation',
+  },
   { name: 'parallel', description: 'Run multiple subagents in parallel' },
-  { name: 'web', description: 'Search the web for documentation or information' },
+  {
+    name: 'web',
+    description: 'Search the web for documentation or information',
+  },
 ];
 
 interface InitializeResponseWithAgentInfo extends InitializeResponse {
@@ -130,7 +150,6 @@ export class AmpAcpAgent implements Agent {
   async initialize(request: InitializeRequest): Promise<InitializeResponseWithAgentInfo> {
     this.clientCapabilities = request.clientCapabilities;
     console.info(`[acp] amp-acp v${PACKAGE_VERSION} initialized`);
-    console.info(`[acp] clientCapabilities: ${JSON.stringify(request.clientCapabilities)}`);
     return {
       protocolVersion: 1,
       agentInfo: {
@@ -232,7 +251,9 @@ export class AmpAcpAgent implements Agent {
     // Reject anything that isn't an Amp thread id up-front so Zed surfaces the
     // error at thread-open time instead of silently failing on the first
     // prompt (when we'd pass it as `continue:` to Amp).
-    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+    if (
+      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
+    ) {
       throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
     }
 
@@ -276,7 +297,9 @@ export class AmpAcpAgent implements Agent {
   }
 
   async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
-    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+    if (
+      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
+    ) {
       throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
     }
 
@@ -326,7 +349,9 @@ export class AmpAcpAgent implements Agent {
   }
 
   async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-    if (!/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)) {
+    if (
+      !/^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.sessionId)
+    ) {
       throw new RequestError(-32602, `Invalid thread ID: ${params.sessionId}. Expected T-{uuid}.`);
     }
 
@@ -411,7 +436,10 @@ export class AmpAcpAgent implements Agent {
         s.mode = newMode;
         await this.client.sessionUpdate({
           sessionId: params.sessionId,
-          update: { sessionUpdate: 'current_mode_update', currentModeId: newMode },
+          update: {
+            sessionUpdate: 'current_mode_update',
+            currentModeId: newMode,
+          },
         });
         if (argText) {
           textInput = argText + '\n';
@@ -432,7 +460,10 @@ export class AmpAcpAgent implements Agent {
             sessionId: params.sessionId,
             update: {
               sessionUpdate: 'agent_message_chunk',
-              content: { type: 'text', text: `Usage: /${cmdName} <your request>` },
+              content: {
+                type: 'text',
+                text: `Usage: /${cmdName} <your request>`,
+              },
             },
           });
           s.active = false;
@@ -468,11 +499,16 @@ export class AmpAcpAgent implements Agent {
     s.controller = controller;
 
     const supportsTerminalOutput =
-      (this.clientCapabilities as { _meta?: { terminal_output?: boolean } } | undefined)?._meta?.terminal_output === true;
+      (this.clientCapabilities as { _meta?: { terminal_output?: boolean } } | undefined)?._meta
+        ?.terminal_output === true;
     const acpState: AcpConversionState = createAcpConversionState(s.cwd, supportsTerminalOutput);
 
     try {
-      for await (const message of execute({ prompt: textInput, options, signal: controller.signal })) {
+      for await (const message of execute({
+        prompt: textInput,
+        options,
+        signal: controller.signal,
+      })) {
         if (!s.threadId && message.session_id) {
           s.threadId = message.session_id;
         }
@@ -494,14 +530,20 @@ export class AmpAcpAgent implements Agent {
           }
           await this.client.sessionUpdate({
             sessionId: params.sessionId,
-            update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `Error: ${message.error}` } },
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: `Error: ${message.error}` },
+            },
           });
         }
       }
 
       return { stopReason: s.cancelled ? 'cancelled' : 'end_turn' };
     } catch (err) {
-      if (s.cancelled || (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted')))) {
+      if (
+        s.cancelled ||
+        (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted')))
+      ) {
         return { stopReason: 'cancelled' };
       }
       if (err instanceof Error && isAuthError(err.message)) {
@@ -580,8 +622,12 @@ export class AmpAcpAgent implements Agent {
     return {};
   }
 
-  async readTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> { return this.client.readTextFile(params); }
-  async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> { return this.client.writeTextFile(params); }
+  async readTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> {
+    return this.client.readTextFile(params);
+  }
+  async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
+    return this.client.writeTextFile(params);
+  }
 }
 
 /**
@@ -602,13 +648,20 @@ export function parseThreadMarkdown(md: string, sessionId: string): SessionNotif
   const indices: { header: string; start: number; bodyStart: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = sectionRe.exec(body)) !== null) {
-    indices.push({ header: m[1].trim(), start: m.index, bodyStart: m.index + m[0].length });
+    indices.push({
+      header: m[1].trim(),
+      start: m.index,
+      bodyStart: m.index + m[0].length,
+    });
   }
 
   if (indices.length === 0) {
     out.push({
       sessionId,
-      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: body.trim() } },
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: body.trim() },
+      },
     });
     return out;
   }
@@ -632,13 +685,15 @@ export function parseThreadMarkdown(md: string, sessionId: string): SessionNotif
 
 export function isAuthError(message: string): boolean {
   const lower = message.toLowerCase();
-  return lower.includes('invalid or missing api key') ||
+  return (
+    lower.includes('invalid or missing api key') ||
     lower.includes("run 'amp login'") ||
     lower.includes('authentication') ||
     lower.includes('unauthorized') ||
     lower.includes('no api key found') ||
     (lower.includes('api key') && lower.includes('login flow')) ||
-    (lower.includes('api key') && (lower.includes('missing') || lower.includes('invalid')));
+    (lower.includes('api key') && (lower.includes('missing') || lower.includes('invalid')))
+  );
 }
 
 export function getTerminalAuthCommand(

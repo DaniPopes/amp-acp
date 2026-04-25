@@ -6,9 +6,15 @@ import type { SessionNotification } from '@agentclientprotocol/sdk';
 
 class TestClient {
   notifications: SessionNotification[] = [];
-  async writeTextFile() { return {}; }
-  async readTextFile() { return { content: 'test' }; }
-  async requestPermission() { return { outcome: { outcome: 'selected' as const, optionId: 'allow' } }; }
+  async writeTextFile() {
+    return {};
+  }
+  async readTextFile() {
+    return { content: 'test' };
+  }
+  async requestPermission() {
+    return { outcome: { outcome: 'selected' as const, optionId: 'allow' } };
+  }
   async sessionUpdate(notification: SessionNotification) {
     this.notifications.push(notification);
   }
@@ -171,14 +177,16 @@ describe('ACP Protocol End-to-End', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const cmdUpdate = testClient.notifications.find(
-      (n) => n.update && 'sessionUpdate' in n.update && n.update.sessionUpdate === 'available_commands_update',
+      (n) =>
+        n.update &&
+        'sessionUpdate' in n.update &&
+        n.update.sessionUpdate === 'available_commands_update',
     );
     expect(cmdUpdate).toBeDefined();
   });
 });
 
 describe('toAcpNotifications', () => {
-
   it('should convert string content to text notification', () => {
     const result = toAcpNotifications(
       { type: 'assistant', message: { content: 'Hello world' } },
@@ -224,7 +232,9 @@ describe('toAcpNotifications', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { path: '/tmp/file.txt' } }],
+          content: [
+            { type: 'tool_use', id: 'tool-1', name: 'Read', input: { path: '/tmp/file.txt' } },
+          ],
         },
       },
       'session-1',
@@ -246,7 +256,14 @@ describe('toAcpNotifications', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'file contents', is_error: false }],
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-1',
+              content: 'file contents',
+              is_error: false,
+            },
+          ],
         },
       },
       'session-1',
@@ -265,7 +282,9 @@ describe('toAcpNotifications', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'not found', is_error: true }],
+          content: [
+            { type: 'tool_result', tool_use_id: 'tool-1', content: 'not found', is_error: true },
+          ],
         },
       },
       'session-1',
@@ -284,7 +303,9 @@ describe('toAcpNotifications', () => {
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'image', source: { type: 'base64', data: 'abc123', media_type: 'image/png' } }],
+          content: [
+            { type: 'image', source: { type: 'base64', data: 'abc123', media_type: 'image/png' } },
+          ],
         },
       },
       'session-1',
@@ -315,7 +336,11 @@ describe('toAcpNotifications', () => {
     expect(result).toHaveLength(3);
     expect(result[0].update).toMatchObject({ sessionUpdate: 'agent_thought_chunk' });
     expect(result[1].update).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
-    expect(result[2].update).toMatchObject({ sessionUpdate: 'tool_call', title: 'ls', kind: 'execute' });
+    expect(result[2].update).toMatchObject({
+      sessionUpdate: 'tool_call',
+      title: 'ls',
+      kind: 'execute',
+    });
   });
 
   it('should return empty for missing message', () => {
@@ -342,7 +367,10 @@ Hi! How can I help you with revmc today?
 `;
     const out = parseThreadMarkdown(md, 's1');
     expect(out).toHaveLength(2);
-    expect(out[0].update).toMatchObject({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'hi' } });
+    expect(out[0].update).toMatchObject({
+      sessionUpdate: 'user_message_chunk',
+      content: { type: 'text', text: 'hi' },
+    });
     expect(out[1].update).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
     expect((out[1].update as { content: { text: string } }).content.text).toContain('revmc');
   });

@@ -33,7 +33,10 @@ interface ExportedThread {
 export async function exportThread(threadId: string): Promise<ExportedThread> {
   // amp truncates output at ~64KB when stdout is a pipe (Bun runtime quirk).
   // Workaround: write directly to a temp file fd and read it back.
-  const tmpFile = path.join(os.tmpdir(), `amp-export-${threadId}-${process.pid}-${Date.now()}.json`);
+  const tmpFile = path.join(
+    os.tmpdir(),
+    `amp-export-${threadId}-${process.pid}-${Date.now()}.json`,
+  );
   const fd = fs.openSync(tmpFile, 'w');
   try {
     const child = spawn('amp', ['threads', 'export', threadId], {
