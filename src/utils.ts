@@ -23,7 +23,3 @@ export function nodeToWebReadable(nodeStream: Readable): ReadableStream<Uint8Arr
     },
   });
 }
-
-export function unreachable(x: never): never {
-  throw new Error(`unreachable: ${JSON.stringify(x)}`);
-}

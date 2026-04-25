@@ -100,24 +100,14 @@ describe('Binary integration tests', () => {
     expect(agentInfo.name).toBe('amp-acp');
     expect(agentInfo.version).toBeDefined();
     const caps = resp.result!.agentCapabilities as Record<string, Record<string, boolean>>;
-    expect(caps.promptCapabilities.image).toBe(true);
+    expect(caps.promptCapabilities.image).toBe(false);
     expect(caps.promptCapabilities.embeddedContext).toBe(true);
     expect(caps.mcpCapabilities.http).toBe(true);
     expect(caps.mcpCapabilities.sse).toBe(true);
-    const authMethods = resp.result!.authMethods as Array<{
-      id: string;
-      name: string;
-      _meta?: { 'terminal-auth'?: { command?: string; args?: string[]; label?: string } };
-    }>;
-    expect(authMethods).toHaveLength(1);
-    expect(authMethods[0].id).toBe('setup');
-    expect(authMethods[0].name).toBe('Amp API Key Setup');
-    const command = authMethods[0]._meta?.['terminal-auth']?.command;
-    const label = authMethods[0]._meta?.['terminal-auth']?.label;
-    expect(command).toBeDefined();
-    expect(path.isAbsolute(command!)).toBe(true);
-    expect(command!.startsWith('/$bunfs/')).toBe(false);
-    expect(label).toBe('Amp API Key Setup');
+    // Without _meta["terminal-auth"] in clientCapabilities, the agent must
+    // not advertise auth methods that the client can't actually launch.
+    const authMethods = resp.result!.authMethods as unknown[];
+    expect(authMethods).toEqual([]);
   });
 
   it('session/new returns sessionId and modes', async () => {
@@ -129,11 +119,12 @@ describe('Binary integration tests', () => {
     expect(resp.result).toBeDefined();
     expect(resp.result!.sessionId).toBeDefined();
     expect(typeof resp.result!.sessionId).toBe('string');
-    expect((resp.result!.sessionId as string).startsWith('S-')).toBe(true);
+    // Allocated up-front via threads.new(); falls back to S- only if amp CLI is missing.
+    expect(resp.result!.sessionId as string).toMatch(/^[ST]-/);
     const modes = resp.result!.modes as Record<string, unknown>;
     expect(modes.currentModeId).toBe('default');
     const availableModes = modes.availableModes as Array<{ id: string }>;
-    expect(availableModes.map((m) => m.id)).toEqual(['default', 'bypass']);
+    expect(availableModes.map((m) => m.id)).toEqual(['default', 'plan', 'bypass']);
   });
 
   it('session/new with MCP servers returns valid sessionId', async () => {
@@ -156,7 +147,7 @@ describe('Binary integration tests', () => {
     });
 
     expect(resp.result).toBeDefined();
-    expect((resp.result!.sessionId as string).startsWith('S-')).toBe(true);
+    expect(resp.result!.sessionId as string).toMatch(/^[ST]-/);
   });
 
   it('session/set_mode returns empty object', async () => {
@@ -197,8 +188,8 @@ describe('Binary integration tests', () => {
     const id1 = resp1.result!.sessionId as string;
     const id2 = resp2.result!.sessionId as string;
     expect(id1).not.toBe(id2);
-    expect(id1.startsWith('S-')).toBe(true);
-    expect(id2.startsWith('S-')).toBe(true);
+    expect(id1).toMatch(/^[ST]-/);
+    expect(id2).toMatch(/^[ST]-/);
   });
 
   it('receives available_commands_update notification after session/new', async () => {
