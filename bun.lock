@@ -5,7 +5,7 @@
       "name": "amp-acp",
       "dependencies": {
         "@agentclientprotocol/sdk": "0.20.0",
-        "@sourcegraph/amp": "^0.0.1765685598-g5365e6",
+        "@sourcegraph/amp": "^0.0.1777076476-ge780d5",
         "@sourcegraph/amp-sdk": "0.1.0-20260425005347-g58772b5",
       },
       "devDependencies": {
@@ -17,41 +17,41 @@
   "packages": {
     "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.20.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-BxEHyE4MvwyOsdyVPub1vEtyrq8E0JSdjC+ckXWimY1VabFCTXdPyXv2y2Omz1j+iod7Z8oBJDXFCJptM0GBqQ=="],
 
-    "@napi-rs/keyring": ["@napi-rs/keyring@1.1.9", "", { "optionalDependencies": { "@napi-rs/keyring-darwin-arm64": "1.1.9", "@napi-rs/keyring-darwin-x64": "1.1.9", "@napi-rs/keyring-freebsd-x64": "1.1.9", "@napi-rs/keyring-linux-arm-gnueabihf": "1.1.9", "@napi-rs/keyring-linux-arm64-gnu": "1.1.9", "@napi-rs/keyring-linux-arm64-musl": "1.1.9", "@napi-rs/keyring-linux-riscv64-gnu": "1.1.9", "@napi-rs/keyring-linux-x64-gnu": "1.1.9", "@napi-rs/keyring-linux-x64-musl": "1.1.9", "@napi-rs/keyring-win32-arm64-msvc": "1.1.9", "@napi-rs/keyring-win32-ia32-msvc": "1.1.9", "@napi-rs/keyring-win32-x64-msvc": "1.1.9" } }, "sha512-qjg04yaJ/gFqgG7wDqLlWBvZpsjvYDtwL+xOr2vSM2JrhojuIKsw7pH013U7xJOradTVGeQqhwqgZtt2IblgOw=="],
+    "@napi-rs/keyring": ["@napi-rs/keyring@1.1.10", "", { "optionalDependencies": { "@napi-rs/keyring-darwin-arm64": "1.1.10", "@napi-rs/keyring-darwin-x64": "1.1.10", "@napi-rs/keyring-freebsd-x64": "1.1.10", "@napi-rs/keyring-linux-arm-gnueabihf": "1.1.10", "@napi-rs/keyring-linux-arm64-gnu": "1.1.10", "@napi-rs/keyring-linux-arm64-musl": "1.1.10", "@napi-rs/keyring-linux-riscv64-gnu": "1.1.10", "@napi-rs/keyring-linux-x64-gnu": "1.1.10", "@napi-rs/keyring-linux-x64-musl": "1.1.10", "@napi-rs/keyring-win32-arm64-msvc": "1.1.10", "@napi-rs/keyring-win32-ia32-msvc": "1.1.10", "@napi-rs/keyring-win32-x64-msvc": "1.1.10" } }, "sha512-PTMyX7FVZGP4s0LcjgrFonek7Sr9ZTdi0TgpR4/4RQmC2TiDcjpdZOXxRMe2aP+5N89Ix9RG9QWclgqRHLk/Xw=="],
 
-    "@napi-rs/keyring-darwin-arm64": ["@napi-rs/keyring-darwin-arm64@1.1.9", "", { "os": "darwin", "cpu": "arm64" }, "sha512-/lVnrSFrut+8pQC6IcqlfHKzcEmf2XvQDOZPB5X4vI23GrNXBd56EuBlFPdTBtx46A8Bn+Aqi6pS8cnprHtcCw=="],
+    "@napi-rs/keyring-darwin-arm64": ["@napi-rs/keyring-darwin-arm64@1.1.10", "", { "os": "darwin", "cpu": "arm64" }, "sha512-qdXBVypPNgTzso5F/YXWy5dOfFEb9eo43uROMlvwlhj7Aw137iwqwHiqlxR0teFKA33cWnem+ZKeVSIPoobtNA=="],
 
-    "@napi-rs/keyring-darwin-x64": ["@napi-rs/keyring-darwin-x64@1.1.9", "", { "os": "darwin", "cpu": "x64" }, "sha512-G3PiFZTAFTzUnpSB31A/UaPjl48/3sDTLmLxaAZBEk7HcOyBnL31gA1YqhDCO7F2y5sD5TWiFiuID9MyqYOcjw=="],
+    "@napi-rs/keyring-darwin-x64": ["@napi-rs/keyring-darwin-x64@1.1.10", "", { "os": "darwin", "cpu": "x64" }, "sha512-53DgSzhTAJwxR3KCyggHWcLwp+cw2v1zAhBiqNn1P8XwSJSba7HzFwsei6zZMn7bn3UY1ngIHEtaA74UUJVJyw=="],
 
-    "@napi-rs/keyring-freebsd-x64": ["@napi-rs/keyring-freebsd-x64@1.1.9", "", { "os": "freebsd", "cpu": "x64" }, "sha512-R4XbvRhEzQyOy4yM+SMDgk8BgkLPkIzXGwR6QR0wJ2YrPeBx3F2TrgdHfsIGSn/X5Axg/2UlrCiZVciZ5BmusA=="],
+    "@napi-rs/keyring-freebsd-x64": ["@napi-rs/keyring-freebsd-x64@1.1.10", "", { "os": "freebsd", "cpu": "x64" }, "sha512-pI6lect/Dp8NnV+g3w1hmYLt69FbSwKFAHn77vjeUaIT5H9C0ikAgwLk89Sd8/Ei/AHHldGkrLeWkNjnIiHfoQ=="],
 
-    "@napi-rs/keyring-linux-arm-gnueabihf": ["@napi-rs/keyring-linux-arm-gnueabihf@1.1.9", "", { "os": "linux", "cpu": "arm" }, "sha512-UrKy110I+zQyBtw4HLVUqZ1jDq11K3PmQIYgWAJNwB5VQOj4IQ63zLxk4V01Jx4bNOJmGNlvHDJUAyh/lC5Yww=="],
+    "@napi-rs/keyring-linux-arm-gnueabihf": ["@napi-rs/keyring-linux-arm-gnueabihf@1.1.10", "", { "os": "linux", "cpu": "arm" }, "sha512-w4psOx5m1ltvNLABT/BpIzP5roVcglR1kDhzZgSEOIIrf2i4FKPQqUIo5UQtjsu+AqhhYwnlnketKDf4h+D06g=="],
 
-    "@napi-rs/keyring-linux-arm64-gnu": ["@napi-rs/keyring-linux-arm64-gnu@1.1.9", "", { "os": "linux", "cpu": "arm64" }, "sha512-yOrhVpNGexDYzybe3dhmHQRPBDjlZPtJDE+eGSi1JwEqYlWDB+4IWjRsetxnO63DhnMFRLeMTdwWghsYrA7VwA=="],
+    "@napi-rs/keyring-linux-arm64-gnu": ["@napi-rs/keyring-linux-arm64-gnu@1.1.10", "", { "os": "linux", "cpu": "arm64" }, "sha512-YMC+ZLj3RldGD2Q5wzlZbc8vTh5Fteln+FpB2lw7EbDib3mmIribNH1NG21E4SwculFRDkVJqYGzwIhafloT8Q=="],
 
-    "@napi-rs/keyring-linux-arm64-musl": ["@napi-rs/keyring-linux-arm64-musl@1.1.9", "", { "os": "linux", "cpu": "arm64" }, "sha512-82EcuzoV/+Dxwi1HHhrEEprN5Ou7OsRKyTJSaRqiVuGvLaQDUhZX/4zXTTh4Pz24m22Q4aoJogafS31w8iKGGw=="],
+    "@napi-rs/keyring-linux-arm64-musl": ["@napi-rs/keyring-linux-arm64-musl@1.1.10", "", { "os": "linux", "cpu": "arm64" }, "sha512-X/Gr5q2vJW7HMpcWRKj7eXer00a1PYb3zt3xsEG/VbcEo5A973pJANTBhYuoW098O/b7ORkunFt9WSbCgenw2A=="],
 
-    "@napi-rs/keyring-linux-riscv64-gnu": ["@napi-rs/keyring-linux-riscv64-gnu@1.1.9", "", { "os": "linux", "cpu": "none" }, "sha512-Q1ar7DszC1X8FW6w7Ql7b72GFeAUxkTiOuxXChCFBy7eWCQSDrr52ZLroIowp82RmkQLZebnK+IwSssD2Ntoag=="],
+    "@napi-rs/keyring-linux-riscv64-gnu": ["@napi-rs/keyring-linux-riscv64-gnu@1.1.10", "", { "os": "linux", "cpu": "none" }, "sha512-vA3R4NVBlU0TVDHavwr5hSqePSs9OwTzzzFlTbZzqgh9s7OqcSwNT096nbr5dRjuQfG9o4/xvjfvVJ4v5z0Egg=="],
 
-    "@napi-rs/keyring-linux-x64-gnu": ["@napi-rs/keyring-linux-x64-gnu@1.1.9", "", { "os": "linux", "cpu": "x64" }, "sha512-LMvrYt1ho3pEDECssA7ATbcMDgayEUwwSD+UfrC7Hj1+C6dlvipwt5njwUDCno2OeXbjjisCo4CR9fDmXa4sZA=="],
+    "@napi-rs/keyring-linux-x64-gnu": ["@napi-rs/keyring-linux-x64-gnu@1.1.10", "", { "os": "linux", "cpu": "x64" }, "sha512-qbKE72UeVOrIoiYYHh7joTpDIgQCZpW5OJHG4Ir19GHLdQwNZGKLfFxrTT2DvZ5EXwFJWbOp4Dew4OvvQ0E63g=="],
 
-    "@napi-rs/keyring-linux-x64-musl": ["@napi-rs/keyring-linux-x64-musl@1.1.9", "", { "os": "linux", "cpu": "x64" }, "sha512-x2i/TgS2/fM+6LRj1MrtVC580sepz5GcxbSCXpttx2H58uZKBF0vVM9HDPHoKP2w5++fyrA17eltJNYN3Ob46A=="],
+    "@napi-rs/keyring-linux-x64-musl": ["@napi-rs/keyring-linux-x64-musl@1.1.10", "", { "os": "linux", "cpu": "x64" }, "sha512-niLWyjD/JxQwlOTPeldIx8Xnf03Mp4ooorpWJMWbMuVz/6hSyLVghY/BDYu2Oaxhc+XlTEjmqwhoTWYhmti5eA=="],
 
-    "@napi-rs/keyring-win32-arm64-msvc": ["@napi-rs/keyring-win32-arm64-msvc@1.1.9", "", { "os": "win32", "cpu": "arm64" }, "sha512-14t6p8CTBNfGzLO5LXqurT+pAOf/ocGjOM/qiG/LW+jPkhyJYBNI9e3HKq3QX+ObbnxVpt4fAY02b4XLt7EWig=="],
+    "@napi-rs/keyring-win32-arm64-msvc": ["@napi-rs/keyring-win32-arm64-msvc@1.1.10", "", { "os": "win32", "cpu": "arm64" }, "sha512-VBlqZ0MF5ksc/Z+yxoL2+p6TDu2rqBOcgZ+HwXzSfgFnfnuPds7xOVdFwwaiJbj9CsCrgnByr1jtHRvfEQ6Iiw=="],
 
-    "@napi-rs/keyring-win32-ia32-msvc": ["@napi-rs/keyring-win32-ia32-msvc@1.1.9", "", { "os": "win32", "cpu": "ia32" }, "sha512-7+7aXz5op6PtOnWYcK1GYXWQlk2zfpdPt9taLqmCCVpk1g4m3Gw1wyKyQxjrg9clHWdNhdWxhFEA0osDxG8/Eg=="],
+    "@napi-rs/keyring-win32-ia32-msvc": ["@napi-rs/keyring-win32-ia32-msvc@1.1.10", "", { "os": "win32", "cpu": "ia32" }, "sha512-0AvwivxgtjdpTCZCFAQUCxFA45DNKXOsdZYXBCIDfPIpUPgLxhIAsg6q7NJK00r1M24StwwfD+AzZDu14J1PKQ=="],
 
-    "@napi-rs/keyring-win32-x64-msvc": ["@napi-rs/keyring-win32-x64-msvc@1.1.9", "", { "os": "win32", "cpu": "x64" }, "sha512-P1wsSrSqDqvcXLL7yiH2RsO3De65wuEQj1ZjV9s1MHfEP5dIdriNYZfFsRBlOsl32GoK3qFzsuH5DTVviGEHSw=="],
+    "@napi-rs/keyring-win32-x64-msvc": ["@napi-rs/keyring-win32-x64-msvc@1.1.10", "", { "os": "win32", "cpu": "x64" }, "sha512-T02DfUUvp3epOJ5lC7hcM5ff6xaLhIfymBf0LEa0oQMi+yCVoDrgjeKeGCUGwtVJWfphu58Tf9twX+hRiAD0dg=="],
 
-    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1765685598-g5365e6", "", { "dependencies": { "@napi-rs/keyring": "1.1.9" }, "bin": { "amp": "dist/main.js" } }, "sha512-9BUK22SxjNme91EnHgCDKiIoe9EXxaNNBNgv86OaPs2d8cdqwQimL7oY8ufD7eRWdEndE6IXS6A7JitXnNQ1SA=="],
+    "@sourcegraph/amp": ["@sourcegraph/amp@0.0.1777076476-ge780d5", "", { "dependencies": { "@napi-rs/keyring": "1.1.10" }, "bin": { "amp": "dist/main.js" } }, "sha512-2fiH98PLqaS07pdTa5N5cGwS9UVeUb+oaUVodlptVQhSwXjq+6aY8YzLBZyxNytcOs8tQzT7MrNr5UvC3Xi6Gw=="],
 
     "@sourcegraph/amp-sdk": ["@sourcegraph/amp-sdk@0.1.0-20260425005347-g58772b5", "", { "dependencies": { "zod": "^3.23.8" }, "bin": { "amp-sdk": "bin/amp-sdk.js" } }, "sha512-kNBHC2Fg1HGEPF7YRdP3b1JOjqxJE4rgilLt+SlTBJG96EJMTfWSWKOPYj/anzJb3dOGh/CPCPZrWZXPROcVXA=="],
 
-    "@types/bun": ["@types/bun@1.3.8", "", { "dependencies": { "bun-types": "1.3.8" } }, "sha512-3LvWJ2q5GerAXYxO2mffLTqOzEu5qnhEAlh48Vnu8WQfnmSwbgagjGZV6BoHKJztENYEDn6QmVd949W4uESRJA=="],
+    "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
 
     "@types/node": ["@types/node@25.2.1", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-CPrnr8voK8vC6eEtyRzvMpgp3VyVRhgclonE7qYi6P9sXwYb59ucfrnmFBTaP0yUi8Gk4yZg/LlTJULGxvTNsg=="],
 
-    "bun-types": ["bun-types@1.3.8", "", { "dependencies": { "@types/node": "*" } }, "sha512-fL99nxdOWvV4LqjmC+8Q9kW3M4QTtTR1eePs94v5ctGqU8OeceWrSUaRw3JYb7tU3FkMIAjkueehrHPPPGKi5Q=="],
+    "bun-types": ["bun-types@1.3.13", "", { "dependencies": { "@types/node": "*" } }, "sha512-QXKeHLlOLqQX9LgYaHJfzdBaV21T63HhFJnvuRCcjZiaUDpbs5ED1MgxbMra71CsryN/1dAoXuJJJwIv/2drVA=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
