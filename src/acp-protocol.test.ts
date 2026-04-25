@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, expect } from 'bun:test';
 import { ClientSideConnection, AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import { AmpAcpAgent } from './server.js';
+import { AmpAcpAgent, parseThreadMarkdown } from './server.js';
 import { toAcpNotifications } from './to-acp.js';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 
@@ -316,5 +316,40 @@ describe('toAcpNotifications', () => {
   it('should return empty for missing message', () => {
     const result = toAcpNotifications({ type: 'assistant' }, 'session-1');
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('parseThreadMarkdown', () => {
+  it('strips frontmatter and splits user/assistant turns', () => {
+    const md = `---
+threadId: T-019dc29e-4e83-726f-8e0d-4eb73d6f2b17
+created: 2026-04-25T03:10:47.939Z
+agentMode: smart
+---
+
+## User
+
+hi
+
+## Assistant
+
+Hi! How can I help you with revmc today?
+`;
+    const out = parseThreadMarkdown(md, 's1');
+    expect(out).toHaveLength(2);
+    expect(out[0].update).toMatchObject({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'hi' } });
+    expect(out[1].update).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
+    expect((out[1].update as { content: { text: string } }).content.text).toContain('revmc');
+  });
+
+  it('returns [] for empty input', () => {
+    expect(parseThreadMarkdown('', 's1')).toHaveLength(0);
+    expect(parseThreadMarkdown('   \n', 's1')).toHaveLength(0);
+  });
+
+  it('falls back to one agent chunk when there are no headers', () => {
+    const out = parseThreadMarkdown('just some text', 's1');
+    expect(out).toHaveLength(1);
+    expect(out[0].update).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
   });
 });

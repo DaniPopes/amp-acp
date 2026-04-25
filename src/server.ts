@@ -22,6 +22,7 @@ import {
   type WriteTextFileRequest,
   type WriteTextFileResponse,
   type ClientCapabilities,
+  type SessionNotification,
 } from '@agentclientprotocol/sdk';
 import { execute, threads, type StreamMessage } from '@sourcegraph/amp-sdk';
 import { convertAcpMcpServersToAmpConfig, type AmpMcpConfig } from './mcp-config.js';
@@ -224,14 +225,8 @@ export class AmpAcpAgent implements Agent {
       cwd,
     });
 
-    if (md && md.trim()) {
-      await this.client.sessionUpdate({
-        sessionId: params.sessionId,
-        update: {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: md },
-        },
-      });
+    for (const note of parseThreadMarkdown(md, params.sessionId)) {
+      await this.client.sessionUpdate(note);
     }
 
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
@@ -428,6 +423,52 @@ export class AmpAcpAgent implements Agent {
 
   async readTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> { return this.client.readTextFile(params); }
   async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> { return this.client.writeTextFile(params); }
+}
+
+/**
+ * Parse the markdown returned by `amp threads markdown` into per-turn ACP
+ * session notifications. The format is YAML frontmatter (--- delimited)
+ * followed by `## User` / `## Assistant` (and similar) H2 sections.
+ */
+export function parseThreadMarkdown(md: string, sessionId: string): SessionNotification[] {
+  if (!md || !md.trim()) return [];
+
+  // Strip YAML frontmatter.
+  let body = md;
+  const fmMatch = md.match(/^---\n[\s\S]*?\n---\n+/);
+  if (fmMatch) body = md.slice(fmMatch[0].length);
+
+  const out: SessionNotification[] = [];
+  const sectionRe = /^## (.+)$/gm;
+  const indices: { header: string; start: number; bodyStart: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = sectionRe.exec(body)) !== null) {
+    indices.push({ header: m[1].trim(), start: m.index, bodyStart: m.index + m[0].length });
+  }
+
+  if (indices.length === 0) {
+    out.push({
+      sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: body.trim() } },
+    });
+    return out;
+  }
+
+  for (let i = 0; i < indices.length; i++) {
+    const cur = indices[i];
+    const next = indices[i + 1];
+    const text = body.slice(cur.bodyStart, next ? next.start : body.length).trim();
+    if (!text) continue;
+    const isUser = /^user\b/i.test(cur.header);
+    out.push({
+      sessionId,
+      update: {
+        sessionUpdate: isUser ? 'user_message_chunk' : 'agent_message_chunk',
+        content: { type: 'text', text },
+      },
+    });
+  }
+  return out;
 }
 
 export function isAuthError(message: string): boolean {
