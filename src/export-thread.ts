@@ -31,7 +31,8 @@ interface ExportedThread {
 }
 
 export async function exportThread(threadId: string): Promise<ExportedThread> {
-  // amp truncates output at ~64KB when stdout is a pipe (Bun runtime quirk).
+  // amp truncates output at ~64KB when stdout is a pipe — that's the default
+  // Linux pipe buffer size, so amp likely exits before draining stdout.
   // Workaround: write directly to a temp file fd and read it back.
   const tmpFile = path.join(
     os.tmpdir(),
