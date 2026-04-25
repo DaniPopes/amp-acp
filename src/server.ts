@@ -723,20 +723,21 @@ export class AmpAcpAgent implements Agent {
 
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
     // The Amp CLI doesn't expose pagination; ignore params.cursor.
-    // params.cwd / additionalDirectories are ignored — we return all threads
-    // and let the client filter. Per-thread cwd comes from the `tree` field
-    // on each list entry (with a process.cwd() fallback in listAmpThreads).
-    void params;
+    // Per-thread cwd comes from the `tree` field on each list entry (with
+    // a process.cwd() fallback in listAmpThreads). additionalDirectories
+    // isn't tracked by amp, so we ignore that filter.
     try {
       const entries = await listAmpThreads();
-      return {
-        sessions: entries.map((e) => ({
+      const filterCwd = params.cwd ? path.resolve(params.cwd) : undefined;
+      const sessions = entries
+        .filter((e) => filterCwd === undefined || path.resolve(e.cwd) === filterCwd)
+        .map((e) => ({
           sessionId: e.threadId,
           cwd: e.cwd,
           title: e.title,
           updatedAt: e.updatedAt,
-        })),
-      };
+        }));
+      return { sessions };
     } catch (err) {
       // Don't return an empty list on failure: the client can't distinguish
       // "no threads" from "amp CLI missing / auth broken / parser broke",
