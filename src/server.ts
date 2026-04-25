@@ -240,11 +240,6 @@ export class AmpAcpAgent implements Agent {
         version: PACKAGE_VERSION,
       },
       agentCapabilities: {
-        _meta: {
-          amp: {
-            promptQueueing: true,
-          },
-        },
         loadSession: true,
         sessionCapabilities: {
           close: {},

@@ -58,10 +58,6 @@ describe('ACP Protocol End-to-End', () => {
     expect(response.agentCapabilities?.sessionCapabilities?.list).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.resume).toBeDefined();
     expect(response.agentCapabilities?.sessionCapabilities?.fork).toBeDefined();
-    expect(
-      (response.agentCapabilities?._meta as { amp?: { promptQueueing?: boolean } } | undefined)?.amp
-        ?.promptQueueing,
-    ).toBe(true);
     expect(response.authMethods).toHaveLength(2);
     expect(response.authMethods![0].id).toBe('amp-login');
     expect(response.authMethods![0]._meta?.['terminal-auth']?.command).toBe('amp');
