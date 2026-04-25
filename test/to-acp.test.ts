@@ -8,7 +8,7 @@ import {
   markdownEscape,
   sanitizeTitle,
   toDisplayPath,
-} from './to-acp.js';
+} from '../src/to-acp.js';
 
 describe('kindForTool', () => {
   it('maps Amp tool names to ACP kinds', () => {

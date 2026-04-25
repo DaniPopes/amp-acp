@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, expect } from 'bun:test';
 import { ClientSideConnection, AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import { AmpAcpAgent, parseThreadMarkdown } from './server.js';
-import { toAcpNotifications } from './to-acp.js';
+import { AmpAcpAgent, parseThreadMarkdown } from '../src/server.js';
+import { toAcpNotifications } from '../src/to-acp.js';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 
 class TestClient {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import path from 'node:path';
-import { getTerminalAuthCommand, isAuthError } from './server.js';
+import { getTerminalAuthCommand, isAuthError } from '../src/server.js';
 
 describe('isAuthError', () => {
   it('detects missing API key login flow errors', () => {

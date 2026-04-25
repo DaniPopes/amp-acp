@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 
-const BINARY_PATH = path.resolve(__dirname, '../dist/amp-acp-test');
+const BINARY_PATH = path.resolve(__dirname, '../../dist/amp-acp-test');
 
 interface JsonRpcMessage {
   jsonrpc: string;

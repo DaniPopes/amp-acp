@@ -4,7 +4,7 @@
 - `bun run build` — Bundle TypeScript to `dist/index.js` (single file, Bun target)
 - `bun start` or `bun dist/index.js` — Run the ACP adapter
 - `bun run lint` — Type-check with `tsc --noEmit`
-- `bun test src/` — Run tests with Bun's built-in test runner
+- `bun run test` — Run unit tests with Bun's built-in test runner
 
 ## Architecture
 This is an ACP (Agent Client Protocol) adapter that bridges Amp Code to ACP-compatible clients like Zed.

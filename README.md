@@ -150,7 +150,7 @@ For more details, see [docs/mcp-passthrough.md](docs/mcp-passthrough.md).
 bun install
 bun run build        # Bundle to dist/index.js
 bun run lint         # Type-check with tsc
-bun test src/        # Run unit tests
+bun run test         # Run unit tests
 bun run test:binary  # Run binary integration tests
 bun run test:all     # Run all tests
 ```

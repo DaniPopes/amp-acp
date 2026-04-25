@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'bun:test';
-import { AmpAcpAgent } from './server.js';
+import { AmpAcpAgent } from '../src/server.js';
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
 
 const mockClient = {
