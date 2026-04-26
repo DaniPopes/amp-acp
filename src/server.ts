@@ -42,7 +42,7 @@ import { toAcpNotifications, createAcpConversionState, type AcpConversionState }
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
 import { forkAmpThread } from './fork-thread.js';
 import { listAmpThreads } from './list-threads.js';
-import { fetchThreadCost, contextWindowForModel, totalContextTokens } from './thread-usage.js';
+import { fetchThreadCost, fetchContextUsage, liveUsageToContext } from './thread-usage.js';
 import { loadStoredApiKey } from './credentials.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -144,6 +144,7 @@ const AVAILABLE_COMMANDS = [
   },
   { name: 'cost', description: 'Show the current thread cost and context usage' },
   { name: 'usage', description: 'Show the current thread cost and context usage' },
+  { name: 'id', description: 'Show the current thread / session ID' },
   { name: 'plan', description: 'Switch to read-only analysis mode' },
   { name: 'code', description: 'Switch to default mode' },
   { name: 'yolo', description: 'Bypass all permission prompts' },
@@ -538,6 +539,19 @@ export class AmpAcpAgent implements Agent {
         await this.reportThreadCost(params.sessionId, s);
         s.active = false;
         return { stopReason: 'end_turn' };
+      } else if (cmdName === 'id') {
+        const idText = s.threadId
+          ? `Thread ID: ${s.threadId}\nhttps://ampcode.com/threads/${s.threadId}`
+          : `Session ID: ${params.sessionId} (no amp thread allocated yet)`;
+        await this.client.sessionUpdate({
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: idText },
+          },
+        });
+        s.active = false;
+        return { stopReason: 'end_turn' };
       } else if (cmdName === 'handoff') {
         if (!s.threadId) {
           await this.client.sessionUpdate({
@@ -766,17 +780,27 @@ export class AmpAcpAgent implements Agent {
     if (!s.threadId) {
       text = 'No active thread yet. Send a prompt first.';
     } else {
-      let costStr: string;
-      try {
-        costStr = await fetchThreadCost(s.threadId);
-      } catch (e) {
-        costStr = `(cost unavailable: ${(e as Error).message})`;
-      }
+      const threadId = s.threadId;
+      // Run cost lookup and authoritative usage lookup in parallel; both
+      // shell out to the amp CLI. The export gives true {totalInputTokens,
+      // maxInputTokens} per turn; falling back to in-memory live usage
+      // covers the freshly-streamed case before the export catches up.
+      const [costResult, usageResult] = await Promise.allSettled([
+        fetchThreadCost(threadId),
+        fetchContextUsage(threadId),
+      ]);
+      const costStr =
+        costResult.status === 'fulfilled'
+          ? costResult.value
+          : `(cost unavailable: ${(costResult.reason as Error).message})`;
+
+      const ctx =
+        (usageResult.status === 'fulfilled' ? usageResult.value : null) ??
+        (s.lastUsage ? liveUsageToContext(s.lastUsage, s.lastModel ?? undefined) : null);
+
       let pctStr = '';
-      if (s.lastUsage) {
-        const used = totalContextTokens(s.lastUsage);
-        const window = contextWindowForModel(s.lastModel ?? undefined);
-        const pct = (used / window) * 100;
+      if (ctx) {
+        const pct = (ctx.totalInputTokens / ctx.maxInputTokens) * 100;
         pctStr = ` (${pct.toFixed(1)}%)`;
       }
       text = `${costStr}${pctStr}`;
