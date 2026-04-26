@@ -42,6 +42,7 @@ import { toAcpNotifications, createAcpConversionState, type AcpConversionState }
 import { exportThread, exportedThreadToNotifications } from './export-thread.js';
 import { forkAmpThread } from './fork-thread.js';
 import { listAmpThreads } from './list-threads.js';
+import { fetchThreadCost, contextWindowForModel, totalContextTokens } from './thread-usage.js';
 import { loadStoredApiKey } from './credentials.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -63,6 +64,13 @@ function detectTerminalOutputCapability(caps: ClientCapabilities | undefined): b
   );
 }
 
+interface LastUsage {
+  input_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  output_tokens: number;
+}
+
 interface SessionState {
   threadId: string | null;
   controller: AbortController | null;
@@ -72,6 +80,8 @@ interface SessionState {
   model: string;
   mcpConfig: AmpMcpConfig;
   cwd: string;
+  lastUsage: LastUsage | null;
+  lastModel: string | null;
 }
 
 const AVAILABLE_MODES = [
@@ -132,6 +142,8 @@ const AVAILABLE_COMMANDS = [
     name: 'handoff',
     description: 'Hand off the current thread to a new thread with an optional goal',
   },
+  { name: 'cost', description: 'Show the current thread cost and context usage' },
+  { name: 'usage', description: 'Show the current thread cost and context usage' },
   { name: 'plan', description: 'Switch to read-only analysis mode' },
   { name: 'code', description: 'Switch to default mode' },
   { name: 'yolo', description: 'Bypass all permission prompts' },
@@ -291,6 +303,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd: params.cwd || process.cwd(),
+      lastUsage: null,
+      lastModel: null,
     });
 
     const result: NewSessionResponse = {
@@ -355,6 +369,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      lastUsage: null,
+      lastModel: null,
     });
 
     for (const note of notifications) {
@@ -392,6 +408,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      lastUsage: null,
+      lastModel: null,
     });
 
     // Replay the source thread's history to the client so the user sees the
@@ -442,6 +460,8 @@ export class AmpAcpAgent implements Agent {
       model: 'smart',
       mcpConfig,
       cwd,
+      lastUsage: null,
+      lastModel: null,
     });
 
     setImmediate(() => this.sendAvailableCommandsUpdate(params.sessionId));
@@ -514,6 +534,10 @@ export class AmpAcpAgent implements Agent {
 
       if (cmdName === 'init') {
         textInput = INIT_PROMPT;
+      } else if (cmdName === 'cost' || cmdName === 'usage') {
+        await this.reportThreadCost(params.sessionId, s);
+        s.active = false;
+        return { stopReason: 'end_turn' };
       } else if (cmdName === 'handoff') {
         if (!s.threadId) {
           await this.client.sessionUpdate({
@@ -631,6 +655,14 @@ export class AmpAcpAgent implements Agent {
           s.threadId = message.session_id;
         }
 
+        if (message.type === 'assistant' && message.message.usage) {
+          s.lastUsage = message.message.usage;
+          s.lastModel = message.message.model;
+        }
+        if (message.type === 'result' && message.usage) {
+          s.lastUsage = message.usage;
+        }
+
         if (message.type === 'assistant' || message.type === 'user') {
           for (const n of toAcpNotifications(message, params.sessionId, acpState)) {
             try {
@@ -727,6 +759,35 @@ export class AmpAcpAgent implements Agent {
     } catch (e) {
       console.error('[acp] failed to send current_mode_update', e);
     }
+  }
+
+  private async reportThreadCost(sessionId: string, s: SessionState): Promise<void> {
+    let text: string;
+    if (!s.threadId) {
+      text = 'No active thread yet. Send a prompt first.';
+    } else {
+      let costStr: string;
+      try {
+        costStr = await fetchThreadCost(s.threadId);
+      } catch (e) {
+        costStr = `(cost unavailable: ${(e as Error).message})`;
+      }
+      let pctStr = '';
+      if (s.lastUsage) {
+        const used = totalContextTokens(s.lastUsage);
+        const window = contextWindowForModel(s.lastModel ?? undefined);
+        const pct = (used / window) * 100;
+        pctStr = ` (${pct.toFixed(1)}%)`;
+      }
+      text = `${costStr}${pctStr}`;
+    }
+    await this.client.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text },
+      },
+    });
   }
 
   private setModel(s: SessionState, modelId: string): void {
