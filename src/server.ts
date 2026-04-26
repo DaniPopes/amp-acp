@@ -44,6 +44,7 @@ import { forkAmpThread } from './fork-thread.js';
 import { listAmpThreads } from './list-threads.js';
 import { loadStoredApiKey } from './credentials.js';
 import path from 'node:path';
+import fs from 'node:fs';
 import packageJson from '../package.json';
 
 const PACKAGE_VERSION: string = packageJson.version;
@@ -127,6 +128,10 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules), Claude rules (CLA
 
 const AVAILABLE_COMMANDS = [
   { name: 'init', description: 'Generate an AGENTS.md file for the project' },
+  {
+    name: 'handoff',
+    description: 'Hand off the current thread to a new thread with an optional goal',
+  },
   { name: 'plan', description: 'Switch to read-only analysis mode' },
   { name: 'code', description: 'Switch to default mode' },
   { name: 'yolo', description: 'Bypass all permission prompts' },
@@ -322,18 +327,19 @@ export class AmpAcpAgent implements Agent {
 
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
-    const supportsTerminalOutput = detectTerminalOutputCapability(this.clientCapabilities);
 
     // Try the structured export first (full tool_use/tool_result/thinking
     // history); fall back to markdown parsing if the CLI doesn't support
     // `threads export` or anything else goes wrong.
+    //
+    // Force supportsTerminalOutput=false on replay: the live-terminal path
+    // emits a `terminal` widget keyed by tool_use_id, but no terminal was
+    // ever created on the client (we don't call terminal/create on load),
+    // so Zed renders an empty box. Plain `console` fences replay correctly.
     let notifications: SessionNotification[];
     try {
       const thread = await exportThread(params.sessionId);
-      notifications = exportedThreadToNotifications(
-        thread,
-        createAcpConversionState(cwd, supportsTerminalOutput),
-      );
+      notifications = exportedThreadToNotifications(thread, createAcpConversionState(cwd, false));
     } catch (e) {
       console.error('[acp] threads export failed, falling back to markdown:', e);
       const md = await threads.markdown({ threadId: params.sessionId });
@@ -369,7 +375,6 @@ export class AmpAcpAgent implements Agent {
 
     const mcpConfig = convertAcpMcpServersToAmpConfig(params.mcpServers);
     const cwd = params.cwd || process.cwd();
-    const supportsTerminalOutput = detectTerminalOutputCapability(this.clientCapabilities);
 
     let newThreadId: string;
     try {
@@ -393,11 +398,12 @@ export class AmpAcpAgent implements Agent {
     // prior conversation in the new session pane. The handoff already injected
     // a synthesized "context" turn into the new amp thread, so future prompts
     // on newThreadId will continue against that handoff context server-side.
+    // Force supportsTerminalOutput=false on replay (see loadSession for why).
     try {
       const thread = await exportThread(params.sessionId);
       const notifications = exportedThreadToNotifications(
         thread,
-        createAcpConversionState(cwd, supportsTerminalOutput),
+        createAcpConversionState(cwd, false),
       );
       // Rewrite sessionId in each notification to point at the new session.
       for (const note of notifications) {
@@ -508,6 +514,49 @@ export class AmpAcpAgent implements Agent {
 
       if (cmdName === 'init') {
         textInput = INIT_PROMPT;
+      } else if (cmdName === 'handoff') {
+        if (!s.threadId) {
+          await this.client.sessionUpdate({
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: {
+                type: 'text',
+                text: 'No active thread to hand off. Send a prompt first.',
+              },
+            },
+          });
+          s.active = false;
+          return { stopReason: 'end_turn' };
+        }
+        try {
+          const newThreadId = await forkAmpThread(s.threadId, argText);
+          const previousThreadId = s.threadId;
+          s.threadId = newThreadId;
+          await this.client.sessionUpdate({
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: {
+                type: 'text',
+                text: `Handed off ${previousThreadId} → ${newThreadId}${argText ? `\nGoal: ${argText}` : ''}\nNext prompt will continue against the new thread.`,
+              },
+            },
+          });
+        } catch (e) {
+          await this.client.sessionUpdate({
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: {
+                type: 'text',
+                text: `Handoff failed: ${(e as Error).message}`,
+              },
+            },
+          });
+        }
+        s.active = false;
+        return { stopReason: 'end_turn' };
       } else if (COMMAND_TO_MODE[cmdName]) {
         const newMode = COMMAND_TO_MODE[cmdName];
         await this.applyPermissionMode(params.sessionId, s, newMode);
@@ -728,9 +777,9 @@ export class AmpAcpAgent implements Agent {
     // isn't tracked by amp, so we ignore that filter.
     try {
       const entries = await listAmpThreads();
-      const filterCwd = params.cwd ? path.resolve(params.cwd) : undefined;
+      const filterCwd = params.cwd ? canonicalize(params.cwd) : undefined;
       const sessions = entries
-        .filter((e) => filterCwd === undefined || path.resolve(e.cwd) === filterCwd)
+        .filter((e) => filterCwd === undefined || canonicalize(e.cwd) === filterCwd)
         .map((e) => ({
           sessionId: e.threadId,
           cwd: e.cwd,
@@ -824,6 +873,19 @@ export function isAuthError(message: string): boolean {
     (lower.includes('api key') && lower.includes('login flow')) ||
     (lower.includes('api key') && (lower.includes('missing') || lower.includes('invalid')))
   );
+}
+
+/** Resolve symlinks and normalize a path so listSessions cwd filtering matches
+ * the recorded `tree` even when the user opened the project via a symlinked
+ * path (e.g. `/home/x/repo` vs `/mnt/disk/repo`). Falls back to path.resolve
+ * if the path doesn't exist on disk. */
+function canonicalize(p: string): string {
+  const resolved = path.resolve(p);
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 export function getTerminalAuthCommand(

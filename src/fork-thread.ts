@@ -13,13 +13,13 @@
 // the cost of not having a real fork primitive.
 import { spawn } from 'node:child_process';
 
-const HANDOFF_GOAL = '(thread forked, awaiting next prompt)';
+const DEFAULT_HANDOFF_GOAL = 'continue';
 
-export async function forkAmpThread(sourceThreadId: string): Promise<string> {
+export async function forkAmpThread(sourceThreadId: string, goal?: string): Promise<string> {
   const child = spawn('amp', ['threads', 'handoff', sourceThreadId, '--print'], {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  child.stdin.end(HANDOFF_GOAL);
+  child.stdin.end(goal && goal.trim() ? goal : DEFAULT_HANDOFF_GOAL);
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
   child.stdout.on('data', (b: Buffer) => stdoutChunks.push(b));
